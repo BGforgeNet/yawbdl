@@ -1,10 +1,11 @@
-## YAWBDL
+## Yet Another WayBack DownLoader
 
-Yet another Wayback downloader is a tool to download archived pages from Internet Archive, which I wrote because none of other tools worked good enough (or at all) in my use cases.
+YAWBDL is a tool to download archived pages from Internet Archive, which I wrote because none of other tools worked good enough (or at all) in my use cases.
 
 ### Usage
 
 ```bash
+$ pip install -r requirements.txt
 $ ./yawbdl.py
 usage: yawbdl.py [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE]
                  [--to TO_DATE] [--timeout TIMEOUT]
