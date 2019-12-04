@@ -8,7 +8,7 @@ import sys
 import os
 import os.path as path
 import argparse
-
+import errno
 
 parser = argparse.ArgumentParser(description='Download a website from Internet Archive', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -72,7 +72,7 @@ def download_file(snap):
   
   fpath = path.join(dst_dir, timestamp, get_file_path(original))
   if path.isfile(fpath):
-    print("[Already on disk, skipped].")
+    print("[Skip: already on disk].")
     return
 
   url = vanilla_url.format(timestamp, original)
@@ -83,16 +83,25 @@ def download_file(snap):
   else:
     content = resp.content
     if len(content) == 0:
-      print("[File size is 0, not saving to disk]", flush=True)
+      print("[Skip: file size is 0]", flush=True)
     else:
       write_file(fpath, content)
 
 def write_file(fpath, content):
   dirname, basename = path.split(fpath)
   os.makedirs(dirname, exist_ok=True)
-  with open(fpath, "wb") as file:
-    file.write(content)
-  print("[OK]", flush=True)
+  too_long = False
+  try:
+    with open(fpath, "wb") as file:
+      file.write(content)
+  except OSError as exc:
+    if exc.errno == errno.ENAMETOOLONG:
+      print("[Error: file name too long, skipped]", flush=True)
+      too_long = True
+    else:
+      raise
+  if not too_long:
+    print("[OK]", flush=True)
 
 snap_list = get_snapshot_list()
 download_files(snap_list)
