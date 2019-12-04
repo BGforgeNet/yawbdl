@@ -70,39 +70,40 @@ def download_file(snap):
   timestamp = snap[0]
   original = snap[1]
   print(timestamp, original, " ", end="", flush=True)
-
   
   fpath = path.join(dst_dir, timestamp, get_file_path(original))
   if path.isfile(fpath):
     print("[Skip: already on disk].")
     return
 
-  url = vanilla_url.format(timestamp, original)
-  resp = requests.get(url, timeout=timeout)
-  code = resp.status_code
-  if code != 200:
-    print("[Error: {}]".format(code), flush=True)
+  if dry_run:
+    print("") # carriage return
   else:
-    content = resp.content
-    if len(content) == 0:
-      print("[Skip: file size is 0]", flush=True)
+    url = vanilla_url.format(timestamp, original)
+    resp = requests.get(url, timeout=timeout)
+    code = resp.status_code
+    if code != 200:
+      print("[Error: {}]".format(code), flush=True)
     else:
-      write_file(fpath, content)
+      content = resp.content
+      if len(content) == 0:
+        print("[Skip: file size is 0]", flush=True)
+      else:
+        write_file(fpath, content)
 
 def write_file(fpath, content):
   dirname, basename = path.split(fpath)
   os.makedirs(dirname, exist_ok=True)
   too_long = False
-  if not dry_run:
-    try:
-      with open(fpath, "wb") as file:
-        file.write(content)
-    except OSError as exc:
-      if exc.errno == errno.ENAMETOOLONG:
-        print("[Error: file name too long, skipped]", flush=True)
-        too_long = True
-      else:
-        raise
+  try:
+    with open(fpath, "wb") as file:
+      file.write(content)
+  except OSError as exc:
+    if exc.errno == errno.ENAMETOOLONG:
+      print("[Error: file name too long, skipped]", flush=True)
+      too_long = True
+    else:
+      raise
   if not too_long:
     print("[OK]", flush=True)
 
