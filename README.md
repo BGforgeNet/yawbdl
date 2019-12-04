@@ -20,4 +20,5 @@ optional arguments:
                      None)
   --to TO_DATE       to date (default: None)
   --timeout TIMEOUT  request timeout (default: 10)
+  -n                 dry run (default: False)
 ```

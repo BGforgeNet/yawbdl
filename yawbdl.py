@@ -17,6 +17,7 @@ parser.add_argument('-o', dest='dst_dir', help='output directory')
 parser.add_argument('--from', dest='from_date', default=None, action='append', help='from date, up to 14 digits: yyyyMMddhhmmss')
 parser.add_argument('--to', dest='to_date', default=None, help='to date')
 parser.add_argument('--timeout', dest='timeout', default=10, help='request timeout')
+parser.add_argument('-n', action='store_true', help="dry run")
 
 args = parser.parse_args()
 
@@ -30,6 +31,7 @@ dst_dir = args.dst_dir
 from_date = args.from_date
 to_date = args.to_date
 timeout = int(args.timeout)
+dry_run = args.n
 
 cdx_url = "http://web.archive.org/cdx/search/cdx?"
 params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
@@ -91,17 +93,20 @@ def write_file(fpath, content):
   dirname, basename = path.split(fpath)
   os.makedirs(dirname, exist_ok=True)
   too_long = False
-  try:
-    with open(fpath, "wb") as file:
-      file.write(content)
-  except OSError as exc:
-    if exc.errno == errno.ENAMETOOLONG:
-      print("[Error: file name too long, skipped]", flush=True)
-      too_long = True
-    else:
-      raise
+  if not dry_run:
+    try:
+      with open(fpath, "wb") as file:
+        file.write(content)
+    except OSError as exc:
+      if exc.errno == errno.ENAMETOOLONG:
+        print("[Error: file name too long, skipped]", flush=True)
+        too_long = True
+      else:
+        raise
   if not too_long:
     print("[OK]", flush=True)
 
 snap_list = get_snapshot_list()
 download_files(snap_list)
+if dry_run:
+  print("Dry run completed.")
