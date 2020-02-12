@@ -9,6 +9,7 @@ import os
 import os.path as path
 import argparse
 import errno
+import time
 
 parser = argparse.ArgumentParser(description='Download a website from Internet Archive', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -18,6 +19,7 @@ parser.add_argument('--from', dest='from_date', default=None, action='append', h
 parser.add_argument('--to', dest='to_date', default=None, help='to date')
 parser.add_argument('--timeout', dest='timeout', default=10, help='request timeout')
 parser.add_argument('-n', action='store_true', help="dry run")
+parser.add_argument('--delay', default=0, help="delay between requests")
 
 args = parser.parse_args()
 
@@ -32,6 +34,7 @@ from_date = args.from_date
 to_date = args.to_date
 timeout = int(args.timeout)
 dry_run = args.n
+delay = int(args.delay)
 
 cdx_url = "http://web.archive.org/cdx/search/cdx?"
 params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
@@ -73,12 +76,14 @@ def download_file(snap):
   
   fpath = path.join(dst_dir, timestamp, get_file_path(original))
   if path.isfile(fpath):
-    print("[Skip: already on disk].")
+    print("[Skip: already on disk]")
     return
 
   if dry_run:
     print("") # carriage return
   else:
+    if delay:
+      time.sleep(delay)
     url = vanilla_url.format(timestamp, original)
     resp = requests.get(url, timeout=timeout)
     code = resp.status_code
