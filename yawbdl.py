@@ -19,7 +19,8 @@ parser.add_argument('--from', dest='from_date', default=None, action='append', h
 parser.add_argument('--to', dest='to_date', default=None, help='to date')
 parser.add_argument('--timeout', dest='timeout', default=10, help='request timeout')
 parser.add_argument('-n', action='store_true', help="dry run")
-parser.add_argument('--delay', default=0, help="delay between requests")
+parser.add_argument('--delay', default=1, help="delay between requests")
+parser.add_argument('--retries', default=0, help="max number of retries")
 
 args = parser.parse_args()
 
@@ -35,6 +36,7 @@ to_date = args.to_date
 timeout = int(args.timeout)
 dry_run = args.n
 delay = int(args.delay)
+retries = int(args.retries)
 
 cdx_url = "http://web.archive.org/cdx/search/cdx?"
 params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
@@ -82,10 +84,22 @@ def download_file(snap):
   if dry_run:
     print("") # carriage return
   else:
-    if delay:
-      time.sleep(delay)
+    retry_num = 0
     url = vanilla_url.format(timestamp, original)
-    resp = requests.get(url, timeout=timeout)
+    while retry_num <= retries:
+      try:
+        if delay:
+          time.sleep(delay)
+          resp = requests.get(url, timeout=timeout)
+          break
+      except Exception:
+        if retry_num < retries:
+          print("failed to connect, retrying after {} seconds... ".format(delay), end="", flush=True)
+          retry_num += 1
+        else:
+          print("failed to connect, aborting", flush=True)
+          sys.exit(1)
+
     code = resp.status_code
     if code != 200:
       print("[Error: {}]".format(code), flush=True)
