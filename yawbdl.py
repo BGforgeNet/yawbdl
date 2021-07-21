@@ -89,15 +89,15 @@ def download_file(snap):
     while retry_count <= retries:
       try:
         if delay:
-          time.sleep(delay)
+          time.sleep(delay * (2**retry_count)) # increase delay with each try
         resp = requests.get(url, timeout=timeout)
         break
       except Exception:
         if retry_count < retries:
-          print("failed to connect, retrying after {} seconds... ".format(delay), end="", flush=True)
+          print("    failed to connect, retrying after {} seconds... ".format(delay), flush=True)
           retry_count += 1
         else:
-          print("failed to connect, aborting", flush=True)
+          print("    failed to connect, aborting", flush=True)
           sys.exit(1)
 
     code = resp.status_code
