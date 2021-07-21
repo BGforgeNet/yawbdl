@@ -84,18 +84,18 @@ def download_file(snap):
   if dry_run:
     print("") # carriage return
   else:
-    retry_num = 0
+    retry_count = 0
     url = vanilla_url.format(timestamp, original)
-    while retry_num <= retries:
+    while retry_count <= retries:
       try:
         if delay:
           time.sleep(delay)
-          resp = requests.get(url, timeout=timeout)
-          break
+        resp = requests.get(url, timeout=timeout)
+        break
       except Exception:
-        if retry_num < retries:
+        if retry_count < retries:
           print("failed to connect, retrying after {} seconds... ".format(delay), end="", flush=True)
-          retry_num += 1
+          retry_count += 1
         else:
           print("failed to connect, aborting", flush=True)
           sys.exit(1)
