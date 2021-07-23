@@ -50,6 +50,9 @@ vanilla_url = "http://web.archive.org/web/{}id_/{}"
 def get_snapshot_list():
   resp = requests.get(cdx_url + params)
   snap_list = resp.json()
+  if len(snap_list) == 0:
+    print("Sorry, no snapshots found!")
+    sys.exit(0)
   del snap_list[0] # delete header
   snap_list.sort(key = lambda row: row[0]) # sort by timestamp
   return snap_list
