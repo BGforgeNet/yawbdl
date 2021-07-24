@@ -97,8 +97,9 @@ def download_file(snap):
         break
       except Exception:
         if retry_count < retries:
-          print("    failed to connect, retrying after {} seconds... ".format(delay), flush=True)
           retry_count += 1
+          new_delay = delay * (2**retry_count)
+          print("    failed to connect, retrying after {} seconds... ".format(new_delay), flush=True)
         else:
           print("    failed to connect, aborting", flush=True)
           sys.exit(1)
