@@ -21,6 +21,7 @@ parser.add_argument('--timeout', dest='timeout', default=10, help='request timeo
 parser.add_argument('-n', action='store_true', help="dry run")
 parser.add_argument('--delay', default=1, help="delay between requests")
 parser.add_argument('--retries', default=0, help="max number of retries")
+parser.add_argument('--skip-timestamps', default=None, action = 'append', nargs='+', help="skip snapshots with these timestamps (sometimes Internet Archive just fails to serve a specific snapshot)")
 
 args = parser.parse_args()
 
@@ -37,6 +38,7 @@ timeout = int(args.timeout)
 dry_run = args.n
 delay = int(args.delay)
 retries = int(args.retries)
+skip_timestamps = args.skip_timestamps
 
 cdx_url = "http://web.archive.org/cdx/search/cdx?"
 params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
@@ -78,7 +80,11 @@ def download_file(snap):
   timestamp = snap[0]
   original = snap[1]
   print(timestamp, original, " ", end="", flush=True)
-  
+
+  if timestamp in skip_timestamps:
+    print("[Skip: by timestamp command line option]")
+    return
+
   fpath = path.join(dst_dir, timestamp, get_file_path(original))
   if path.isfile(fpath):
     print("[Skip: already on disk]")
