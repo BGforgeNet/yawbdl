@@ -38,7 +38,7 @@ timeout = int(args.timeout)
 dry_run = args.n
 delay = int(args.delay)
 retries = int(args.retries)
-skip_timestamps = args.skip_timestamps
+skip_timestamps = args.skip_timestamps[0]
 
 cdx_url = "http://web.archive.org/cdx/search/cdx?"
 params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
