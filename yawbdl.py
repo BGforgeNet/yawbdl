@@ -111,7 +111,7 @@ def download_file(snap):
         else:
           if no_fail:
             print("    failed to download, proceeding to next file", flush=True)
-            break
+            return
           else:
             print("    failed to download, aborting", flush=True)
             sys.exit(1)
