@@ -21,6 +21,7 @@ parser.add_argument('--timeout', dest='timeout', default=10, help='request timeo
 parser.add_argument('-n', action='store_true', help="dry run")
 parser.add_argument('--delay', default=1, help="delay between requests")
 parser.add_argument('--retries', default=0, help="max number of retries")
+parser.add_argument('--no-fail', default=False, action='store_true', help="if retries are exceeded, and the file still couldn't have been downloaded, proceed to the next file instead of aborting the run")
 parser.add_argument('--skip-timestamps', default=None, action = 'append', nargs='+', help="skip snapshots with these timestamps (sometimes Internet Archive just fails to serve a specific snapshot)")
 
 args = parser.parse_args()
@@ -38,6 +39,7 @@ timeout = int(args.timeout)
 dry_run = args.n
 delay = int(args.delay)
 retries = int(args.retries)
+no_fail = args.no_fail
 skip_timestamps = args.skip_timestamps[0]
 
 cdx_url = "http://web.archive.org/cdx/search/cdx?"
@@ -105,10 +107,14 @@ def download_file(snap):
         if retry_count < retries:
           retry_count += 1
           new_delay = delay * 2* retry_count
-          print("    failed to connect, retrying after {} seconds... ".format(new_delay), flush=True)
+          print("    failed to download, retrying after {} seconds... ".format(new_delay), flush=True)
         else:
-          print("    failed to connect, aborting", flush=True)
-          sys.exit(1)
+          if no_fail:
+            print("    failed to download, proceeding to next file", flush=True)
+            break
+          else:
+            print("    failed to download, aborting", flush=True)
+            sys.exit(1)
 
     code = resp.status_code
     if code != 200:
