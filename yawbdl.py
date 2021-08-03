@@ -132,7 +132,9 @@ def write_file(fpath, content):
   if fpath.endswith('/') and path.isfile(dirname.rstrip('/')):
     print("[Warning] file {} already exists, can't create directory with the same name".format(fpath), flush=True)
     return
-
+  print(dirname)
+  print(fpath)
+  print(dirname.rstrip('/'))
   os.makedirs(dirname, exist_ok=True)
   too_long = False
   try:
