@@ -129,7 +129,7 @@ def download_file(snap):
 def write_file(fpath, content):
   dirname, basename = path.split(fpath)
 
-  if fpath.endswith('/') and path.isfile(dirname):
+  if fpath.endswith('/') and path.isfile(dirname.rstrip('/')):
     print("[Warning] file {} already exists, can't create directory with the same name".format(fpath), flush=True)
     return
 
