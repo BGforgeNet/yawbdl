@@ -128,6 +128,11 @@ def download_file(snap):
 
 def write_file(fpath, content):
   dirname, basename = path.split(fpath)
+
+  if fpath.endswith('/') and path.isfile(dirname):
+    print("[Warning] file {} already exists, can't create directory with the same name".format(fpath), flush=True)
+    return
+
   os.makedirs(dirname, exist_ok=True)
   too_long = False
   try:
