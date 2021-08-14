@@ -40,7 +40,10 @@ dry_run = args.n
 delay = int(args.delay)
 retries = int(args.retries)
 no_fail = args.no_fail
-skip_timestamps = args.skip_timestamps[0]
+try:
+  skip_timestamps = args.skip_timestamps[0]
+except:
+  skip_timestamps = []
 
 cdx_url = "http://web.archive.org/cdx/search/cdx?"
 params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
