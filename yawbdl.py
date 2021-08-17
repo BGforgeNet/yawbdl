@@ -135,8 +135,15 @@ def write_file(fpath, content):
   if path.isfile(dirname):
     print("[Warning] file {} already exists, can't create directory with the same name for {}".format(dirname, basename), flush=True)
     return
-  os.makedirs(dirname, exist_ok=True)
   too_long = False
+  try:
+    os.makedirs(dirname, exist_ok=True)
+  except OSError as exc:
+    if exc.errno == errno.ENAMETOOLONG:
+      print("[Error: dir name too long, skipped]", flush=True)
+      too_long = True
+    else:
+      raise
   try:
     with open(fpath, "wb") as file:
       file.write(content)
