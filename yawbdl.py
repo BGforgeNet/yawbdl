@@ -144,16 +144,16 @@ def write_file(fpath, content):
       too_long = True
     else:
       raise
-  try:
-    with open(fpath, "wb") as file:
-      file.write(content)
-  except OSError as exc:
-    if exc.errno == errno.ENAMETOOLONG:
-      print("[Error: file name too long, skipped]", flush=True)
-      too_long = True
-    else:
-      raise
   if not too_long:
+    try:
+      with open(fpath, "wb") as file:
+        file.write(content)
+    except OSError as exc:
+      if exc.errno == errno.ENAMETOOLONG:
+        print("[Error: file name too long, skipped]", flush=True)
+        too_long = True
+      else:
+        raise
     print("[OK]", flush=True)
 
 snap_list = get_snapshot_list()
