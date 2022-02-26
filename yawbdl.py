@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser(description='Download a website from Internet A
 
 parser.add_argument('-d', dest='domain', help='domain to download')
 parser.add_argument('-o', dest='dst_dir', help='output directory')
-parser.add_argument('--from', dest='from_date', default=None, action='append', help='from date, up to 14 digits: yyyyMMddhhmmss')
+parser.add_argument('--from', dest='from_date', default=None, help='from date, up to 14 digits: yyyyMMddhhmmss')
 parser.add_argument('--to', dest='to_date', default=None, help='to date')
 parser.add_argument('--timeout', dest='timeout', default=10, help='request timeout')
 parser.add_argument('-n', action='store_true', help="dry run")
