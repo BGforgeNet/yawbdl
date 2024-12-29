@@ -132,6 +132,10 @@ def download_file(snap):
 def write_file(fpath, content):
   dirname, basename = path.split(fpath)
 
+  # Windows file paths can't contain "?". Replace with "@", like wget does.
+  if os.name == 'nt':
+    fpath = fpath.replace("?", "@")
+
   if path.isfile(dirname):
     print("[Warning] file {} already exists, can't create directory with the same name for {}".format(dirname, basename), flush=True)
     return
