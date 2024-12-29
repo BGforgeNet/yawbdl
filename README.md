@@ -9,7 +9,7 @@ git clone https://github.com/BGforgeNet/yawbdl.git
 cd yawbdl
 pip install -r requirements.txt
 
-./yawbdl.py 
+./yawbdl.py
 usage: yawbdl.py [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE] [--to TO_DATE]
                  [--timeout TIMEOUT] [-n] [--delay DELAY] [--retries RETRIES]
                  [--no-fail]
