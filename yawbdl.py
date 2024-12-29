@@ -75,8 +75,14 @@ def download_files(snapshot_list):
 def get_file_path(original_url):
   url = urlsplit(original_url)
   fpath = url.path.lstrip('/')
+
   if url.query:
-    fpath = fpath + "?" + url.query
+    query_separator="?"
+    # Windows file paths can't contain "?". Use "@", like wget does.
+    if os.name == 'nt':
+      query_separator = "@"
+    fpath = fpath + query_separator + url.query
+
   if fpath.endswith('/') or fpath == "":
     fpath = path.join(fpath, 'index.html')
   return fpath
@@ -131,10 +137,6 @@ def download_file(snap):
 
 def write_file(fpath, content):
   dirname, basename = path.split(fpath)
-
-  # Windows file paths can't contain "?". Replace with "@", like wget does.
-  if os.name == 'nt':
-    fpath = fpath.replace("?", "@")
 
   if path.isfile(dirname):
     print("[Warning] file {} already exists, can't create directory with the same name for {}".format(dirname, basename), flush=True)
