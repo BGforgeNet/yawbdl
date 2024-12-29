@@ -35,5 +35,4 @@ options:
                         skip snapshots with these timestamps (sometimes Internet
                         Archive just fails to serve a specific snapshot)
                         (default: None)
-
 ```
