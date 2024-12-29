@@ -13,7 +13,7 @@ import time
 
 parser = argparse.ArgumentParser(
     description="Download a website from Internet Archive",
-    formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, width=80)
+    formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, width=80),
 )
 
 parser.add_argument("-d", dest="domain", help="domain to download")
@@ -56,8 +56,8 @@ from_date = args.from_date
 to_date = args.to_date
 timeout = int(args.timeout)
 dry_run = args.n
-delay = int(args.delay)
-retries = int(args.retries)
+DELAY = int(args.delay)
+RETRIES = int(args.retries)
 no_fail = args.no_fail
 try:
     skip_timestamps = args.skip_timestamps[0]
@@ -65,9 +65,7 @@ except:
     skip_timestamps = []
 
 cdx_url = "http://web.archive.org/cdx/search/cdx?"
-params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(
-    domain
-)
+params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
 if from_date is not None:
     params = params + "&from={}".format(from_date)
 if to_date is not None:
@@ -77,13 +75,40 @@ vanilla_url = "http://web.archive.org/web/{}id_/{}"
 
 
 def get_snapshot_list():
-    resp = requests.get(cdx_url + params)
+    print("Getting snapshot list...")
+    url = cdx_url + params
+    retry_count = 0
+    while retry_count <= RETRIES:
+        try:
+            if DELAY:
+                time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
+            resp = requests.get(url, timeout=timeout)
+            break
+        except Exception:
+            if retry_count < RETRIES:
+                retry_count += 1
+                new_delay = DELAY * 2 * retry_count
+                print(
+                    "    failed to get snapshot list, retrying after {} seconds... ".format(new_delay),
+                    flush=True,
+                )
+            else:
+                print("    failed to get snapshot list, aborting")
+                sys.exit(1)
+
+    code = resp.status_code
+    if resp.status_code != 200:
+        print(f"[Error: {code}]")
+        print("    failed to download snapshot list, aborting")
+        sys.exit(1)
+
     snap_list = resp.json()
     if len(snap_list) == 0:
         print("Sorry, no snapshots found!")
         sys.exit(0)
     del snap_list[0]  # delete header
     snap_list.sort(key=lambda row: row[0])  # sort by timestamp
+    print("Got snapshot list!")
     return snap_list
 
 
@@ -131,20 +156,18 @@ def download_file(snap):
     else:
         retry_count = 0
         url = vanilla_url.format(timestamp, original)
-        while retry_count <= retries:
+        while retry_count <= RETRIES:
             try:
-                if delay:
-                    time.sleep(delay * 2 * retry_count)  # increase delay with each try
+                if DELAY:
+                    time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
                 resp = requests.get(url, timeout=timeout)
                 break
             except Exception:
-                if retry_count < retries:
+                if retry_count < RETRIES:
                     retry_count += 1
-                    new_delay = delay * 2 * retry_count
+                    new_delay = DELAY * 2 * retry_count
                     print(
-                        "    failed to download, retrying after {} seconds... ".format(
-                            new_delay
-                        ),
+                        "    failed to download, retrying after {} seconds... ".format(new_delay),
                         flush=True,
                     )
                 else:
