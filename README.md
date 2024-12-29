@@ -19,19 +19,21 @@ Download a website from Internet Archive
 
 options:
   -h, --help            show this help message and exit
-  -d DOMAIN             domain to download
-  -o DST_DIR            output directory
-  --from FROM_DATE      from date, up to 14 digits: yyyyMMddhhmmss
-  --to TO_DATE          to date
-  --timeout TIMEOUT     request timeout
-  -n                    dry run
-  --delay DELAY         delay between requests
-  --retries RETRIES     max number of retries
+  -d DOMAIN             domain to download (default: None)
+  -o DST_DIR            output directory (default: None)
+  --from FROM_DATE      from date, up to 14 digits: yyyyMMddhhmmss (default:
+                        None)
+  --to TO_DATE          to date (default: None)
+  --timeout TIMEOUT     request timeout (default: 10)
+  -n                    dry run (default: False)
+  --delay DELAY         delay between requests (default: 1)
+  --retries RETRIES     max number of retries (default: 0)
   --no-fail             if retries are exceeded, and the file still couldn't
                         have been downloaded, proceed to the next file instead
-                        of aborting the run
+                        of aborting the run (default: False)
   --skip-timestamps SKIP_TIMESTAMPS [SKIP_TIMESTAMPS ...]
                         skip snapshots with these timestamps (sometimes Internet
                         Archive just fails to serve a specific snapshot)
+                        (default: None)
 
 ```

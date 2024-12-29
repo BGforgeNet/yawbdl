@@ -13,7 +13,7 @@ import time
 
 parser = argparse.ArgumentParser(
     description="Download a website from Internet Archive",
-    formatter_class=lambda prog: argparse.HelpFormatter(prog, width=80)
+    formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, width=80)
 )
 
 parser.add_argument("-d", dest="domain", help="domain to download")
