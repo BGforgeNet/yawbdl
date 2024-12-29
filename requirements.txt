@@ -1,2 +1,1 @@
-argparse
-requests
+requests>=2.32
