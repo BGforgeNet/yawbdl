@@ -2,14 +2,16 @@
 
 YAWBDL is a tool to download archived pages from Internet Archive, which I wrote because none of other tools worked good enough (or at all) in my use cases.
 
+### Installation
+
+```bash
+git clone https://github.com/BGforgeNet/yawbdl.git && yawbdl/install.sh
+```
+
 ### Usage
 
 ```bash
-git clone https://github.com/BGforgeNet/yawbdl.git
-cd yawbdl
-pip install -r requirements.txt
-
-./yawbdl.py
+yawbdl.py
 usage: yawbdl.py [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE] [--to TO_DATE]
                  [--timeout TIMEOUT] [-n] [--delay DELAY] [--retries RETRIES]
                  [--no-fail]
