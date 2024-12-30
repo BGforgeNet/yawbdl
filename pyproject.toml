@@ -1,5 +1,24 @@
+[tool.poetry]
+name = "yawbdl"
+version = "1.0.0"
+description = "A tool to download pages from Internet Archive."
+authors = ["BGforge <dev@bgforge.net>"]
+keywords = ["Internet Archive", "web.archive.org"]
+readme = "README.md"
+homepage = "https://github.com/BGforgeNet/yawbdl"
+repository = "https://github.com/BGforgeNet/yawbdl"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+requests = "^2.32"
+
+[tool.poetry.dev-dependencies]
+black = "^24.0"
+flake8 = "^7.1"
+
+
 [tool.black]
 line-length = 120
 
-[tool.pylint]
-max-line-length = 120
+[tool.poetry.plugins."console_scripts"]
+"yawbdl" = "yawbdl:main"
