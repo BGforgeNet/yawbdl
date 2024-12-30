@@ -10,6 +10,7 @@ import argparse
 import errno
 import time
 import re
+import json
 
 parser = argparse.ArgumentParser(
     description="Download a website from Internet Archive",
@@ -51,7 +52,7 @@ if len(sys.argv) < 2:
 
 # init vars
 domain = args.domain
-dst_dir = args.dst_dir
+DST_DIR = args.dst_dir
 from_date = args.from_date
 to_date = args.to_date
 timeout = int(args.timeout)
@@ -64,7 +65,7 @@ try:
 except:
     skip_timestamps = []
 
-cdx_url = "http://web.archive.org/cdx/search/cdx?"
+CDX_URL = "http://web.archive.org/cdx/search/cdx?"
 params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
 if from_date is not None:
     params = params + "&from={}".format(from_date)
@@ -75,34 +76,49 @@ vanilla_url = "http://web.archive.org/web/{}id_/{}"
 
 
 def get_snapshot_list():
+    '''
+    Load cached snapshot list. If not available, get it from IA.
+    '''
     print("Getting snapshot list...")
-    url = cdx_url + params
-    retry_count = 0
-    while retry_count <= RETRIES:
-        try:
-            if DELAY:
-                time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
-            resp = requests.get(url, timeout=timeout)
-            break
-        except Exception:
-            if retry_count < RETRIES:
-                retry_count += 1
-                new_delay = DELAY * 2 * retry_count
-                print(
-                    "    failed to get snapshot list, retrying after {} seconds... ".format(new_delay),
-                    flush=True,
-                )
-            else:
-                print("    failed to get snapshot list, aborting!")
-                sys.exit(1)
 
-    code = resp.status_code
-    if resp.status_code != 200:
-        print(f"[Error: {code}]")
-        print("    failed to get snapshot list, aborting!")
-        sys.exit(1)
+    # Try cached snapshots
+    snapshots_path = path.join(DST_DIR, "snapshots.json")
+    try:
+        with open(snapshots_path) as fh:
+            snap_list = json.load(fh)
+        print("Found cached snapshots.json")
+    except:
+        # No cache, downloading
+        url = CDX_URL + params
+        retry_count = 0
+        while retry_count <= RETRIES:
+            try:
+                if DELAY:
+                    time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
+                resp = requests.get(url, timeout=timeout)
+                break
+            except Exception:
+                if retry_count < RETRIES:
+                    retry_count += 1
+                    new_delay = DELAY * 2 * retry_count
+                    print(
+                        "    failed to get snapshot list, retrying after {} seconds... ".format(new_delay),
+                        flush=True,
+                    )
+                else:
+                    print("    failed to get snapshot list, aborting!")
+                    sys.exit(1)
 
-    snap_list = resp.json()
+        code = resp.status_code
+        if resp.status_code != 200:
+            print(f"[Error: {code}]")
+            print("    failed to get snapshot list, aborting!")
+            sys.exit(1)
+        snap_list = resp.json()
+        os.makedirs(DST_DIR, exist_ok=True)
+        with open(snapshots_path, "w") as fh:
+            json.dump(snap_list, fh)
+
     if len(snap_list) == 0:
         print("Sorry, no snapshots found!")
         sys.exit(0)
@@ -171,7 +187,7 @@ def download_file(snap):
         print("[Skip: by timestamp command line option]")
         return
 
-    fpath = path.join(dst_dir, timestamp, get_file_path(original))
+    fpath = path.join(DST_DIR, timestamp, get_file_path(original))
     if path.isfile(fpath):
         print("[Skip: already on disk]")
         return
