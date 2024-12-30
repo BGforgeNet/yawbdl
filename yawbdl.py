@@ -10,6 +10,7 @@ import os.path as path
 import argparse
 import errno
 import time
+import re
 
 parser = argparse.ArgumentParser(
     description="Download a website from Internet Archive",
@@ -121,17 +122,44 @@ def download_files(snapshot_list):
         download_file(snap)
 
 
-def get_file_path(original_url):
+def url_to_local_filename(url: str) -> str:
+    """
+    Converts a URL to a local filename compatible with the current operating system.
+    Wget-like https://www.gnu.org/software/wget/manual/wget.html#index-Windows-file-names
+    Except "/", which we later turn into directory tree
+
+    Args:
+        url (str): The input URL.
+
+    Returns:
+        str: The converted filename.
+    """
+    if os.name == "nt":  # Windows
+        # Escape Windows restricted characters
+        restricted_chars = r'[\\|:?"*<>\x00-\x1F\x80-\x9F]'
+        escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
+        # Replace ':' with '+' for host and port separation
+        escaped_url = escaped_url.replace(":", "+")
+        # Replace '?' with '@' for query portion separation
+        escaped_url = escaped_url.replace("?", "@")
+    else:  # Unix-like systems
+        # Escape Unix restricted characters (excluding '/')
+        restricted_chars = r"[\x00-\x1F\x80-\x9F]"
+        escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
+    return escaped_url
+
+
+def get_file_path(original_url: str) -> str:
     url = urlsplit(original_url)
     fpath = url.path.lstrip("/")
 
     if url.query:
-        query_separator = "?"
-        # Windows file paths can't contain "?". Use "@", like wget does.
-        if os.name == "nt":
-            query_separator = "@"
-        fpath = fpath + query_separator + url.query
+        fpath = fpath + '?' + url.query
 
+    # Sanitize for local FS
+    fpath = url_to_local_filename(fpath)
+
+    # If it's a "directory"-like url, add index to have a filename
     if fpath.endswith("/") or fpath == "":
         fpath = path.join(fpath, "index.html")
     return fpath
