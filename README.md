@@ -4,13 +4,13 @@ YAWBDL is a tool to download archived pages from Internet Archive, which I wrote
 
 ### Installation
 
-```bash
+```
 git clone https://github.com/BGforgeNet/yawbdl.git && yawbdl/install.sh
 ```
 
 ### Usage
 
-```bash
+```
 yawbdl.py
 usage: yawbdl.py [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE] [--to TO_DATE]
                  [--timeout TIMEOUT] [-n] [--delay DELAY] [--retries RETRIES]
