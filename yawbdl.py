@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding: utf-8
 
 import requests
 from urllib.parse import urlparse
@@ -94,13 +93,13 @@ def get_snapshot_list():
                     flush=True,
                 )
             else:
-                print("    failed to get snapshot list, aborting")
+                print("    failed to get snapshot list, aborting!")
                 sys.exit(1)
 
     code = resp.status_code
     if resp.status_code != 200:
         print(f"[Error: {code}]")
-        print("    failed to download snapshot list, aborting")
+        print("    failed to get snapshot list, aborting!")
         sys.exit(1)
 
     snap_list = resp.json()
@@ -122,11 +121,11 @@ def download_files(snapshot_list):
         download_file(snap)
 
 
-def url_to_local_filename(url: str) -> str:
+def url_to_path(url: str) -> str:
     """
-    Converts a URL to a local filename compatible with the current operating system.
+    Converts a relative URL to a local path compatible with the current operating system.
     Wget-like https://www.gnu.org/software/wget/manual/wget.html#index-Windows-file-names
-    Except "/", which we later turn into directory tree
+    Except "/", which we later turn into directory tree.
 
     Args:
         url (str): The input URL.
@@ -136,10 +135,8 @@ def url_to_local_filename(url: str) -> str:
     """
     if os.name == "nt":  # Windows
         # Escape Windows restricted characters
-        restricted_chars = r'[\\|:?"*<>\x00-\x1F\x80-\x9F]'
+        restricted_chars = r'[\\|:"*<>\x00-\x1F\x80-\x9F]'
         escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
-        # Replace ':' with '+' for host and port separation
-        escaped_url = escaped_url.replace(":", "+")
         # Replace '?' with '@' for query portion separation
         escaped_url = escaped_url.replace("?", "@")
     else:  # Unix-like systems
@@ -154,10 +151,10 @@ def get_file_path(original_url: str) -> str:
     fpath = url.path.lstrip("/")
 
     if url.query:
-        fpath = fpath + '?' + url.query
+        fpath = fpath + "?" + url.query
 
     # Sanitize for local FS
-    fpath = url_to_local_filename(fpath)
+    fpath = url_to_path(fpath)
 
     # If it's a "directory"-like url, add index to have a filename
     if fpath.endswith("/") or fpath == "":
@@ -253,7 +250,12 @@ def write_file(fpath, content):
         print("[OK]", flush=True)
 
 
-snap_list = get_snapshot_list()
-download_files(snap_list)
-if dry_run:
-    print("Dry run completed.")
+def main():
+    snap_list = get_snapshot_list()
+    download_files(snap_list)
+    if dry_run:
+        print("Dry run completed.")
+
+
+if __name__ == "__main__":
+    main()
