@@ -76,9 +76,9 @@ vanilla_url = "http://web.archive.org/web/{}id_/{}"
 
 
 def get_snapshot_list():
-    '''
+    """
     Load cached snapshot list. If not available, get it from IA.
-    '''
+    """
     print("Getting snapshot list...")
 
     # Try cached snapshots
@@ -189,7 +189,13 @@ def download_file(snap: tuple[str, str]):
     """
     timestamp: str = snap[0]
     original_url: str = snap[1]
-    print(timestamp, original_url, " ", end="", flush=True)
+
+    # Some urls may be malformed and can't be printed with non-UTF-8 encodings.
+    # See https://github.com/BGforgeNet/yawbdl/issues/5
+    try:
+        print(timestamp, original_url, " ", end="", flush=True)
+    except Exception as e:
+        print(f"[Error: malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]")
 
     if timestamp in skip_timestamps:
         print("[Skip: by timestamp command line option]")
