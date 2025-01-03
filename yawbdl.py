@@ -178,16 +178,24 @@ def get_file_path(original_url: str) -> str:
     return fpath
 
 
-def download_file(snap):
-    timestamp = snap[0]
-    original = snap[1]
-    print(timestamp, original, " ", end="", flush=True)
+def download_file(snap: tuple[str, str]):
+    """
+    Download and save a single original URL at TIMESTAMP to the destination directory.
+    Will retry RETRIES times.
+
+    Args:
+        snap: [timestamp, original_url]
+
+    """
+    timestamp: str = snap[0]
+    original_url: str = snap[1]
+    print(timestamp, original_url, " ", end="", flush=True)
 
     if timestamp in skip_timestamps:
         print("[Skip: by timestamp command line option]")
         return
 
-    fpath = path.join(DST_DIR, timestamp, get_file_path(original))
+    fpath = path.join(DST_DIR, timestamp, get_file_path(original_url))
     if path.isfile(fpath):
         print("[Skip: already on disk]")
         return
@@ -196,7 +204,7 @@ def download_file(snap):
         print("")  # carriage return
     else:
         retry_count = 0
-        url = vanilla_url.format(timestamp, original)
+        url = vanilla_url.format(timestamp, original_url)
         while retry_count <= RETRIES:
             try:
                 if DELAY:
