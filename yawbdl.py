@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import requests
-from urllib.parse import urlparse
 from urllib.parse import urlsplit
 import sys
 import os
@@ -75,6 +74,11 @@ if to_date is not None:
 vanilla_url = "http://web.archive.org/web/{}id_/{}"
 
 
+def get_snapshot_timestamp(row: list[str]) -> str:
+    """Extract timestamp from snapshot row for sorting."""
+    return row[0]
+
+
 def get_snapshot_list():
     """
     Load cached snapshot list. If not available, get it from IA.
@@ -109,12 +113,12 @@ def get_snapshot_list():
                     print("    failed to get snapshot list, aborting!")
                     sys.exit(1)
 
-        code = resp.status_code
-        if resp.status_code != 200:
+        code = resp.status_code  # type: ignore  # resp is always defined here - script exits above if all retries fail
+        if resp.status_code != 200:  # type: ignore  # resp is always defined here - script exits above if all retries fail
             print(f"[Error: {code}]")
             print("    failed to get snapshot list, aborting!")
             sys.exit(1)
-        snap_list = resp.json()
+        snap_list = resp.json()  # type: ignore  # resp is always defined here - script exits above if all retries fail
         os.makedirs(DST_DIR, exist_ok=True)
         with open(snapshots_path, "w") as fh:
             json.dump(snap_list, fh)
@@ -123,12 +127,12 @@ def get_snapshot_list():
         print("Sorry, no snapshots found!")
         sys.exit(0)
     del snap_list[0]  # delete header
-    snap_list.sort(key=lambda row: row[0])  # sort by timestamp
+    snap_list.sort(key=get_snapshot_timestamp)  # sort by timestamp
     print("Got snapshot list!")
     return snap_list
 
 
-def download_files(snapshot_list):
+def download_files(snapshot_list: list[tuple[str, str]]):
     total = len(snapshot_list)
     i = 0
     for snap in snapshot_list:
@@ -194,7 +198,7 @@ def download_file(snap: tuple[str, str]):
     # See https://github.com/BGforgeNet/yawbdl/issues/5
     try:
         print(timestamp, original_url, " ", end="", flush=True)
-    except Exception as e:
+    except Exception:
         print(f"[Error: malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]")
 
     if timestamp in skip_timestamps:
@@ -236,18 +240,18 @@ def download_file(snap: tuple[str, str]):
                         print("    failed to download, aborting", flush=True)
                         sys.exit(1)
 
-        code = resp.status_code
+        code = resp.status_code  # type: ignore  # resp is always defined here - script exits or returns above if all retries fail
         if code != 200:
             print("[Error: {}]".format(code), flush=True)
         else:
-            content = resp.content
+            content = resp.content  # type: ignore  # resp is always defined here - script exits or returns above if all retries fail
             if len(content) == 0:
                 print("[Skip: file size is 0]", flush=True)
             else:
                 write_file(fpath, content)
 
 
-def write_file(fpath, content):
+def write_file(fpath: str, content: bytes):
     dirname, basename = path.split(fpath)
 
     if path.isfile(dirname):
