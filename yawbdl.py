@@ -154,8 +154,8 @@ def url_to_path(url: str) -> str:
         str: The converted filename.
     """
     if os.name == "nt":  # Windows
-        # Escape Windows restricted characters
-        restricted_chars = r'[\\|:"*<>\x00-\x1F\x80-\x9F]'
+        # Escape Windows restricted characters - including comma which can cause issues
+        restricted_chars = r'[\\|:"*<>,\x00-\x1F\x80-\x9F]'
         escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
         # Replace '?' with '@' for query portion separation
         escaped_url = escaped_url.replace("?", "@")
