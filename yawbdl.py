@@ -154,8 +154,8 @@ def url_to_path(url: str) -> str:
         str: The converted filename.
     """
     if os.name == "nt":  # Windows
-        # Escape Windows restricted characters - including comma which can cause issues
-        restricted_chars = r'[\\|:"*<>,\x00-\x1F\x80-\x9F]'
+        # Escape Windows restricted characters
+        restricted_chars = r'[\\|:"*<>\x00-\x1F\x80-\x9F]'
         escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
         # Replace '?' with '@' for query portion separation
         escaped_url = escaped_url.replace("?", "@")
@@ -176,8 +176,11 @@ def get_file_path(original_url: str) -> str:
     # Sanitize for local FS
     fpath = url_to_path(fpath)
 
+    # Convert forward slashes to OS path separator
+    fpath = fpath.replace("/", path.sep)
+
     # If it's a "directory"-like url, add index to have a filename
-    if fpath.endswith("/") or fpath == "":
+    if fpath.endswith(path.sep) or fpath == "":
         fpath = path.join(fpath, "index.html")
     return fpath
 
