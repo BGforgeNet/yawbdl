@@ -326,11 +326,13 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
 
         # Use SHA-1 hash as fallback filename, save directly under timestamp directory
         file_hash = hashlib.sha1(original_url.encode('utf-8')).hexdigest()
-        file_ext = path.splitext(basename)[1] if '.' in basename else '.html'
+        # Extract extension from original URL path, not the processed basename
+        url_parts = urlsplit(original_url)
+        file_ext = path.splitext(url_parts.path)[1] if '.' in url_parts.path else '.html'
         hash_filename = file_hash + file_ext
         hash_fpath = path.join(timestamp_dir, hash_filename)
 
-        print(f"[Warning: could not save full path to filesystem. Using hashed filename {hash_fpath}]", flush=True)
+        print(f"[Warning: could not save full path to filesystem. Using hashed filename {hash_filename}]", flush=True)
         try:
             with open(hash_fpath, "wb") as file:
                 file.write(content)
