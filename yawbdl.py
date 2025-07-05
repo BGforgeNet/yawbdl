@@ -6,10 +6,11 @@ import sys
 import os
 import os.path as path
 import argparse
-import errno
 import time
 import re
 import json
+import hashlib
+import shutil
 
 parser = argparse.ArgumentParser(
     description="Download a website from Internet Archive",
@@ -77,6 +78,38 @@ vanilla_url = "http://web.archive.org/web/{}id_/{}"
 def get_snapshot_timestamp(row: list[str]) -> str:
     """Extract timestamp from snapshot row for sorting."""
     return row[0]
+
+
+def cleanup_empty_directory(dirname: str, timestamp_dir: str) -> None:
+    """
+    Clean up empty directory tree created for a failed file save.
+
+    Removes the top-level directory under timestamp_dir that was created for the file,
+    but only if it contains no files (to avoid removing directories with successful saves).
+
+    Args:
+        dirname: The directory path where the file was supposed to be saved
+        timestamp_dir: The timestamp directory path (e.g., DST_DIR/timestamp)
+    """
+    try:
+        # Remove the entire directory tree that was created for this file
+        # Find the first subdirectory under timestamp_dir and remove it entirely
+        # but only if it's empty (no other files were saved there)
+        rel_path = path.relpath(dirname, timestamp_dir)
+        if rel_path and rel_path != '.':
+            first_subdir = rel_path.split(path.sep)[0]
+            cleanup_path = path.join(timestamp_dir, first_subdir)
+            if path.exists(cleanup_path):
+                # Check if directory tree is empty
+                is_empty = True
+                for _, _, files in os.walk(cleanup_path):
+                    if files:
+                        is_empty = False
+                        break
+                if is_empty:
+                    shutil.rmtree(cleanup_path)
+    except OSError:
+        pass  # Ignore cleanup errors
 
 
 def get_snapshot_list():
@@ -251,10 +284,10 @@ def download_file(snap: tuple[str, str]):
             if len(content) == 0:
                 print("[Skip: file size is 0]", flush=True)
             else:
-                write_file(fpath, content)
+                write_file(fpath, content, path.join(DST_DIR, timestamp))
 
 
-def write_file(fpath: str, content: bytes):
+def write_file(fpath: str, content: bytes, timestamp_dir: str):
     dirname, basename = path.split(fpath)
 
     if path.isfile(dirname):
@@ -265,26 +298,30 @@ def write_file(fpath: str, content: bytes):
             flush=True,
         )
         return
-    too_long = False
+
+    # Try to create directory and write file normally
     try:
         os.makedirs(dirname, exist_ok=True)
-    except OSError as exc:
-        if exc.errno == errno.ENAMETOOLONG:
-            print("[Error: dir name too long, skipped]", flush=True)
-            too_long = True
-        else:
-            raise
-    if not too_long:
-        try:
-            with open(fpath, "wb") as file:
-                file.write(content)
-        except OSError as exc:
-            if exc.errno == errno.ENAMETOOLONG:
-                print("[Error: file name too long, skipped]", flush=True)
-                too_long = True
-            else:
-                raise
+        with open(fpath, "wb") as file:
+            file.write(content)
         print("[OK]", flush=True)
+    except OSError:
+        # Cleanup any directories that might have been created
+        cleanup_empty_directory(dirname, timestamp_dir)
+
+        # Use SHA-1 hash as fallback filename, save directly under timestamp directory
+        file_hash = hashlib.sha1(fpath.encode('utf-8')).hexdigest()
+        file_ext = path.splitext(basename)[1] if '.' in basename else '.html'
+        hash_filename = file_hash + file_ext
+        hash_fpath = path.join(timestamp_dir, hash_filename)
+
+        print(f"[Warning: could not save full path to filesystem. Using hashed filename {hash_fpath}]", flush=True)
+        try:
+            with open(hash_fpath, "wb") as file:
+                file.write(content)
+            print("[OK]", flush=True)
+        except OSError:
+            print("[Error: failed to save even with hashed filename, skipped]", flush=True)
 
 
 def main():
