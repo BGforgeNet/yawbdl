@@ -284,10 +284,25 @@ def download_file(snap: tuple[str, str]):
             if len(content) == 0:
                 print("[Skip: file size is 0]", flush=True)
             else:
-                write_file(fpath, content, path.join(DST_DIR, timestamp))
+                write_file(fpath, content, path.join(DST_DIR, timestamp), original_url)
 
 
-def write_file(fpath: str, content: bytes, timestamp_dir: str):
+def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str):
+    """Write content to file with hash filename fallback on filesystem errors.
+
+    Attempts to save file with original path structure. If that fails due to filesystem
+    limitations (path length, invalid characters, etc.), cleans up empty directories
+    and saves with SHA-1 hash of original URL as filename under timestamp directory.
+
+    Args:
+        fpath: Full file path where content should be saved
+        content: File content as bytes
+        timestamp_dir: Timestamp directory path (e.g., DST_DIR/timestamp)
+        original_url: Original URL from Internet Archive for hash generation
+
+    Returns:
+        None
+    """
     dirname, basename = path.split(fpath)
 
     if path.isfile(dirname):
@@ -310,7 +325,7 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str):
         cleanup_empty_directory(dirname, timestamp_dir)
 
         # Use SHA-1 hash as fallback filename, save directly under timestamp directory
-        file_hash = hashlib.sha1(fpath.encode('utf-8')).hexdigest()
+        file_hash = hashlib.sha1(original_url.encode('utf-8')).hexdigest()
         file_ext = path.splitext(basename)[1] if '.' in basename else '.html'
         hash_filename = file_hash + file_ext
         hash_fpath = path.join(timestamp_dir, hash_filename)
