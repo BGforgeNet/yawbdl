@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 
-import requests
-from urllib.parse import urlsplit
-import sys
-import os
-import os.path as path
+"""Yet Another Wayback Downloader.
+
+A tool to download archived websites from Internet Archive's Wayback Machine.
+Downloads all snapshots for a given domain within a specified date range,
+preserving the original directory structure when possible.
+"""
+
 import argparse
-import time
-import re
-import json
 import hashlib
+import json
+import os
+from os import path
+import re
 import shutil
+import sys
+import time
+from urllib.parse import urlsplit
+
+import requests
 
 parser = argparse.ArgumentParser(
     description="Download a website from Internet Archive",
@@ -51,28 +59,16 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 # init vars
-domain = args.domain
 DST_DIR = args.dst_dir
-from_date = args.from_date
-to_date = args.to_date
-timeout = int(args.timeout)
-dry_run = args.n
+TIMEOUT = int(args.timeout)
+DRY_RUN = args.n
 DELAY = int(args.delay)
 RETRIES = int(args.retries)
-no_fail = args.no_fail
+NO_FAIL = args.no_fail
 try:
     skip_timestamps = args.skip_timestamps[0]
 except:
     skip_timestamps = []
-
-CDX_URL = "http://web.archive.org/cdx/search/cdx?"
-params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(
-    domain
-)
-if from_date is not None:
-    params = params + "&from={}".format(from_date)
-if to_date is not None:
-    params = params + "&to={}".format(to_date)
 
 vanilla_url = "http://web.archive.org/web/{}id_/{}"
 
@@ -117,6 +113,26 @@ def cleanup_empty_directory(dirname: str, timestamp_dir: str):
         pass  # Ignore cleanup errors
 
 
+def build_snapshots_url(domain: str, from_date: str | None = None, to_date: str | None = None) -> str:
+    """Build the full CDX API URL for retrieving the snapshots list for a domain and date range.
+    
+    Args:
+        domain: The domain to query snapshots for
+        from_date: Optional start date (yyyyMMddhhmmss)
+        to_date: Optional end date (yyyyMMddhhmmss)
+        
+    Returns:
+        Complete CDX API URL with domain and date filters
+    """
+    cdx_url = "http://web.archive.org/cdx/search/cdx?"
+    params = f"output=json&url={domain}&matchType=host&filter=statuscode:200&fl=timestamp,original"
+    if from_date is not None:
+        params += f"&from={from_date}"
+    if to_date is not None:
+        params += f"&to={to_date}"
+    return cdx_url + params
+
+
 def get_snapshot_list() -> SnapshotList:
     """Load cached snapshot list from file or download from Internet Archive.
 
@@ -128,27 +144,25 @@ def get_snapshot_list() -> SnapshotList:
     # Try cached snapshots
     snapshots_path = path.join(DST_DIR, "snapshots.json")
     try:
-        with open(snapshots_path) as fh:
+        with open(snapshots_path, encoding="utf-8") as fh:
             snap_list = json.load(fh)
         print("Found cached snapshots.json")
     except:
         # No cache, downloading
-        url = CDX_URL + params
+        url = build_snapshots_url(args.domain, args.from_date, args.to_date)
         retry_count = 0
         while retry_count <= RETRIES:
             try:
                 if DELAY:
                     time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
-                resp = requests.get(url, timeout=timeout)
+                resp = requests.get(url, timeout=TIMEOUT)
                 break
             except Exception:
                 if retry_count < RETRIES:
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
                     print(
-                        "    failed to get snapshot list, retrying after {} seconds... ".format(
-                            new_delay
-                        ),
+                        "    failed to get snapshot list, retrying after {} seconds... ".format(new_delay),
                         flush=True,
                     )
                 else:
@@ -162,7 +176,7 @@ def get_snapshot_list() -> SnapshotList:
             sys.exit(1)
         snap_list = resp.json()  # type: ignore  # resp is always defined here - script exits above if all retries fail
         os.makedirs(DST_DIR, exist_ok=True)
-        with open(snapshots_path, "w") as fh:
+        with open(snapshots_path, "w", encoding="utf-8") as fh:
             json.dump(snap_list, fh)
 
     if len(snap_list) == 0:
@@ -205,17 +219,13 @@ def url_to_path(url: str) -> str:
     if os.name == "nt":  # Windows
         # Escape Windows restricted characters
         restricted_chars = r'[\\|:"*<>\x00-\x1F\x80-\x9F]'
-        escaped_url = re.sub(
-            restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url
-        )
+        escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
         # Replace '?' with '@' for query portion separation
         escaped_url = escaped_url.replace("?", "@")
     else:  # Unix-like systems
         # Escape Unix restricted characters (excluding '/')
         restricted_chars = r"[\x00-\x1F\x80-\x9F]"
-        escaped_url = re.sub(
-            restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url
-        )
+        escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
     return escaped_url
 
 
@@ -266,9 +276,7 @@ def download_file(snap: tuple[str, str]):
     try:
         print(timestamp, original_url, " ", end="", flush=True)
     except Exception:
-        print(
-            "[Error: malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]"
-        )
+        print("[Error: malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]")
 
     if timestamp in skip_timestamps:
         print("[Skip: by timestamp command line option]")
@@ -279,7 +287,7 @@ def download_file(snap: tuple[str, str]):
         print("[Skip: already on disk]")
         return
 
-    if dry_run:
+    if DRY_RUN:
         print("")  # carriage return
     else:
         retry_count = 0
@@ -288,20 +296,18 @@ def download_file(snap: tuple[str, str]):
             try:
                 if DELAY:
                     time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
-                resp = requests.get(url, timeout=timeout)
+                resp = requests.get(url, timeout=TIMEOUT)
                 break
             except Exception:
                 if retry_count < RETRIES:
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
                     print(
-                        "    failed to download, retrying after {} seconds... ".format(
-                            new_delay
-                        ),
+                        "    failed to download, retrying after {} seconds... ".format(new_delay),
                         flush=True,
                     )
                 else:
-                    if no_fail:
+                    if NO_FAIL:
                         print(
                             "    failed to download, proceeding to next file",
                             flush=True,
@@ -360,9 +366,7 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
         file_hash = hashlib.sha1(original_url.encode("utf-8")).hexdigest()
         # Extract extension from original URL path, not the processed basename
         url_parts = urlsplit(original_url)
-        file_ext = (
-            path.splitext(url_parts.path)[1] if "." in url_parts.path else ".html"
-        )
+        file_ext = path.splitext(url_parts.path)[1] if "." in url_parts.path else ".html"
         hash_filename = file_hash + file_ext
         hash_fpath = path.join(timestamp_dir, hash_filename)
 
@@ -375,9 +379,7 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
                 file.write(content)
             print("[OK]", flush=True)
         except OSError:
-            print(
-                "[Error: failed to save even with hashed filename, skipped]", flush=True
-            )
+            print("[Error: failed to save even with hashed filename, skipped]", flush=True)
 
 
 def main():
@@ -388,7 +390,7 @@ def main():
     """
     snap_list = get_snapshot_list()
     download_files(snap_list)
-    if dry_run:
+    if DRY_RUN:
         print("Dry run completed.")
 
 
