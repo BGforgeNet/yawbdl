@@ -311,12 +311,12 @@ def download_file(snap: tuple[str, str]):
         logger.error("[Malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]")
 
     if timestamp in skip_timestamps:
-        logger.info("[Skip: by timestamp command line option]")
+        logger.info("[SKIP: by timestamp command line option]")
         return
 
     fpath = path.join(DST_DIR, timestamp, get_file_path(original_url))
     if path.isfile(fpath):
-        logger.info("[Skip: already on disk]")
+        logger.info("[SKIP: already on disk]")
         return
 
     if DRY_RUN:
@@ -334,7 +334,7 @@ def download_file(snap: tuple[str, str]):
         else:
             content = resp.content
             if len(content) == 0:
-                logger.info("[Skip: file size is 0]")
+                logger.info("[SKIP: file size is 0]")
             else:
                 write_file(fpath, content, path.join(DST_DIR, timestamp), original_url)
 
@@ -355,9 +355,7 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
     dirname, basename = path.split(fpath)
 
     if path.isfile(dirname):
-        logger.warning(
-            f"[Warning] file {dirname} already exists, can't create directory with the same name for {basename}"
-        )
+        logger.warning(f"File {dirname} already exists, can't create directory with the same name for {basename}")
         return
 
     # Try to create directory and write file normally
@@ -378,13 +376,13 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
         hash_filename = file_hash + file_ext
         hash_fpath = path.join(timestamp_dir, hash_filename)
 
-        logger.warning(f"[Could not save full path to filesystem. Using hashed filename {hash_filename}]")
+        logger.warning(f"[    Could not save full path to filesystem. Using hashed filename {hash_filename}]")
         try:
             with open(hash_fpath, "wb") as file:
                 file.write(content)
             logger.success("[OK]")
         except OSError:
-            logger.error("[Failed to save even with hashed filename, skipped]")
+            logger.error("[SKIP: failed to save even with hashed filename]")
 
 
 def main():
