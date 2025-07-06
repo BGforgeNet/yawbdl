@@ -8,6 +8,7 @@ preserving the original directory structure when possible.
 """
 
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -16,6 +17,7 @@ import re
 import shutil
 import sys
 import time
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 import requests
@@ -74,6 +76,39 @@ except (TypeError, AttributeError):
 # Type alias for snapshot records
 Snapshot = tuple[str, str]
 SnapshotList = list[Snapshot]
+
+
+def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
+    """Decorator that adds retry logic to download functions."""
+
+    @functools.wraps(func)
+    def wrapper(*func_args: Any, **func_kwargs: Any) -> Any | None:
+        retry_count = 0
+        while retry_count <= RETRIES:
+            try:
+                if DELAY:
+                    time.sleep(DELAY * 2 * retry_count)
+                return func(*func_args, **func_kwargs)
+            except:  # pylint: disable=bare-except  # we don't care about the exception type here
+                if retry_count < RETRIES:
+                    retry_count += 1
+                    new_delay = DELAY * 2 * retry_count
+                    print(
+                        f"    failed to download, retrying after {new_delay} seconds... ",
+                        flush=True,
+                    )
+                else:
+                    if NO_FAIL:
+                        print(
+                            "    failed to download, proceeding to next file",
+                            flush=True,
+                        )
+                        return None
+                    print("    failed to download, aborting", flush=True)
+                    sys.exit(1)
+        return None  # This line should never be reached but satisfies pylint
+
+    return wrapper
 
 
 def get_snapshot_timestamp(row: list[str]) -> str:
@@ -149,32 +184,18 @@ def get_snapshot_list() -> SnapshotList:
     except:  # pylint: disable=bare-except  # we don't care about the exception type here
         # No cache, downloading
         url = build_snapshots_url(args.domain, args.from_date, args.to_date)
-        retry_count = 0
-        while retry_count <= RETRIES:
-            try:
-                if DELAY:
-                    time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
-                resp = requests.get(url, timeout=TIMEOUT)
-                break
-            except:  # pylint: disable=bare-except  # we don't care about the exception type here
-                if retry_count < RETRIES:
-                    retry_count += 1
-                    new_delay = DELAY * 2 * retry_count
-                    print(
-                        f"    failed to get snapshot list, retrying after {new_delay} seconds... ",
-                        flush=True,
-                    )
-                else:
-                    print("    failed to get snapshot list, aborting!")
-                    sys.exit(1)
+        resp = fetch_snapshots(url)
 
-        # script exits above if all retries fail
-        code = resp.status_code  # type: ignore  # resp is always defined here
-        if resp.status_code != 200:  # type: ignore  # resp is always defined here
+        if resp is None:  # Failed after all retries
+            print("    failed to get snapshot list, aborting!")
+            sys.exit(1)
+
+        code = resp.status_code
+        if resp.status_code != 200:
             print(f"[Error: {code}]")
             print("    failed to get snapshot list, aborting!")
             sys.exit(1)
-        snap_list = resp.json()  # type: ignore  # resp is always defined here
+        snap_list = resp.json()
         os.makedirs(DST_DIR, exist_ok=True)
         with open(snapshots_path, "w", encoding="utf-8") as fh:
             json.dump(snap_list, fh)
@@ -259,6 +280,18 @@ def get_file_path(original_url: str) -> str:
     return fpath
 
 
+@retry_download
+def fetch_snapshots(url: str) -> requests.Response | None:
+    """Fetch snapshots list from CDX API with retry logic."""
+    return requests.get(url, timeout=TIMEOUT)
+
+
+@retry_download
+def fetch_url(url: str) -> requests.Response | None:
+    """Fetch content from URL with retry logic."""
+    return requests.get(url, timeout=TIMEOUT)
+
+
 def download_file(snap: tuple[str, str]):
     """Download and save a single URL from Internet Archive snapshot.
 
@@ -290,37 +323,17 @@ def download_file(snap: tuple[str, str]):
     if DRY_RUN:
         print("")  # carriage return
     else:
-        retry_count = 0
         url = f"http://web.archive.org/web/{timestamp}id_/{original_url}"
-        while retry_count <= RETRIES:
-            try:
-                if DELAY:
-                    time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
-                resp = requests.get(url, timeout=TIMEOUT)
-                break
-            except:  # pylint: disable=bare-except  # we don't care about the exception type here
-                if retry_count < RETRIES:
-                    retry_count += 1
-                    new_delay = DELAY * 2 * retry_count
-                    print(
-                        f"    failed to download, retrying after {new_delay} seconds... ",
-                        flush=True,
-                    )
-                else:
-                    if NO_FAIL:
-                        print(
-                            "    failed to download, proceeding to next file",
-                            flush=True,
-                        )
-                        return
-                    print("    failed to download, aborting", flush=True)
-                    sys.exit(1)
-        # script exits or returns above if all retries fail
-        code = resp.status_code  # type: ignore  # resp is always defined here
+        resp = fetch_url(url)
+
+        if resp is None:  # Failed after all retries with NO_FAIL=True
+            return
+
+        code = resp.status_code
         if code != 200:
             print(f"[Error: {code}]", flush=True)
         else:
-            content = resp.content  # type: ignore  # resp is always defined here
+            content = resp.content
             if len(content) == 0:
                 print("[Skip: file size is 0]", flush=True)
             else:
