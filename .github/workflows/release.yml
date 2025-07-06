@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+
 name: release
 
 on:
@@ -9,35 +11,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.9"
       - uses: actions/checkout@v4
 
-      - name: Load cached Poetry installation
-        uses: actions/cache@v4
-        with:
-          path: ~/.local
-          key: poetry-lin-0 # increment to reset cache
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1.3.4
-        with:
-          virtualenvs-in-project: true
-
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 
       - name: Publish to PyPi
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          set -xeu -o pipefail
-          poetry config pypi-token.pypi $PYPI_TOKEN
-          poetry build
-          poetry publish
-        env:
-          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+          uv build
+          uv publish

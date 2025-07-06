@@ -66,7 +66,9 @@ except:
     skip_timestamps = []
 
 CDX_URL = "http://web.archive.org/cdx/search/cdx?"
-params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(domain)
+params = "output=json&url={}&matchType=host&filter=statuscode:200&fl=timestamp,original".format(
+    domain
+)
 if from_date is not None:
     params = params + "&from={}".format(from_date)
 if to_date is not None:
@@ -74,15 +76,18 @@ if to_date is not None:
 
 vanilla_url = "http://web.archive.org/web/{}id_/{}"
 
+# Type alias for snapshot records
+Snapshot = tuple[str, str]
+SnapshotList = list[Snapshot]
+
 
 def get_snapshot_timestamp(row: list[str]) -> str:
     """Extract timestamp from snapshot row for sorting."""
     return row[0]
 
 
-def cleanup_empty_directory(dirname: str, timestamp_dir: str) -> None:
-    """
-    Clean up empty directory tree created for a failed file save.
+def cleanup_empty_directory(dirname: str, timestamp_dir: str):
+    """Clean up empty directory tree created for a failed file save.
 
     Removes the top-level directory under timestamp_dir that was created for the file,
     but only if it contains no files (to avoid removing directories with successful saves).
@@ -96,7 +101,7 @@ def cleanup_empty_directory(dirname: str, timestamp_dir: str) -> None:
         # Find the first subdirectory under timestamp_dir and remove it entirely
         # but only if it's empty (no other files were saved there)
         rel_path = path.relpath(dirname, timestamp_dir)
-        if rel_path and rel_path != '.':
+        if rel_path and rel_path != ".":
             first_subdir = rel_path.split(path.sep)[0]
             cleanup_path = path.join(timestamp_dir, first_subdir)
             if path.exists(cleanup_path):
@@ -112,9 +117,11 @@ def cleanup_empty_directory(dirname: str, timestamp_dir: str) -> None:
         pass  # Ignore cleanup errors
 
 
-def get_snapshot_list():
-    """
-    Load cached snapshot list. If not available, get it from IA.
+def get_snapshot_list() -> SnapshotList:
+    """Load cached snapshot list from file or download from Internet Archive.
+
+    Returns:
+        List of snapshot records, each containing (timestamp, original_url)
     """
     print("Getting snapshot list...")
 
@@ -139,7 +146,9 @@ def get_snapshot_list():
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
                     print(
-                        "    failed to get snapshot list, retrying after {} seconds... ".format(new_delay),
+                        "    failed to get snapshot list, retrying after {} seconds... ".format(
+                            new_delay
+                        ),
                         flush=True,
                     )
                 else:
@@ -165,7 +174,12 @@ def get_snapshot_list():
     return snap_list
 
 
-def download_files(snapshot_list: list[tuple[str, str]]):
+def download_files(snapshot_list: SnapshotList):
+    """Download all files from snapshot list with progress tracking.
+
+    Args:
+        snapshot_list: List of snapshot records, each containing (timestamp, original_url)
+    """
     total = len(snapshot_list)
     i = 0
     for snap in snapshot_list:
@@ -175,31 +189,48 @@ def download_files(snapshot_list: list[tuple[str, str]]):
 
 
 def url_to_path(url: str) -> str:
-    """
-    Converts a relative URL to a local path compatible with the current operating system.
-    Wget-like https://www.gnu.org/software/wget/manual/wget.html#index-Windows-file-names
-    Except "/", which we later turn into directory tree.
+    """Convert relative URL to local path compatible with current operating system.
+
+    Follows wget-like behavior for filename escaping:
+    https://www.gnu.org/software/wget/manual/wget.html#index-Windows-file-names
+    Restricted characters are percent-encoded, and '?' is replaced with '@' on Windows
+    for query separation. Forward slashes are preserved for later directory tree conversion.
 
     Args:
-        url (str): The input URL.
+        url: The input URL to convert
 
     Returns:
-        str: The converted filename.
+        The converted filename safe for local filesystem
     """
     if os.name == "nt":  # Windows
         # Escape Windows restricted characters
         restricted_chars = r'[\\|:"*<>\x00-\x1F\x80-\x9F]'
-        escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
+        escaped_url = re.sub(
+            restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url
+        )
         # Replace '?' with '@' for query portion separation
         escaped_url = escaped_url.replace("?", "@")
     else:  # Unix-like systems
         # Escape Unix restricted characters (excluding '/')
         restricted_chars = r"[\x00-\x1F\x80-\x9F]"
-        escaped_url = re.sub(restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url)
+        escaped_url = re.sub(
+            restricted_chars, lambda match: f"%{ord(match.group(0)):02X}", url
+        )
     return escaped_url
 
 
 def get_file_path(original_url: str) -> str:
+    """Convert original URL to local file path.
+
+    Extracts path and query from URL, sanitizes for filesystem compatibility,
+    and adds index.html for directory-like URLs.
+
+    Args:
+        original_url: The original URL to convert
+
+    Returns:
+        Local file path relative to timestamp directory
+    """
     url = urlsplit(original_url)
     fpath = url.path.lstrip("/")
 
@@ -219,13 +250,13 @@ def get_file_path(original_url: str) -> str:
 
 
 def download_file(snap: tuple[str, str]):
-    """
-    Download and save a single original URL at TIMESTAMP to the destination directory.
-    Will retry RETRIES times.
+    """Download and save a single URL from Internet Archive snapshot.
+
+    Downloads content from Internet Archive for given timestamp and URL,
+    then saves it to local filesystem with retry logic.
 
     Args:
-        snap: [timestamp, original_url]
-
+        snap: Tuple containing (timestamp, original_url)
     """
     timestamp: str = snap[0]
     original_url: str = snap[1]
@@ -235,7 +266,9 @@ def download_file(snap: tuple[str, str]):
     try:
         print(timestamp, original_url, " ", end="", flush=True)
     except Exception:
-        print(f"[Error: malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]")
+        print(
+            "[Error: malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]"
+        )
 
     if timestamp in skip_timestamps:
         print("[Skip: by timestamp command line option]")
@@ -262,7 +295,9 @@ def download_file(snap: tuple[str, str]):
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
                     print(
-                        "    failed to download, retrying after {} seconds... ".format(new_delay),
+                        "    failed to download, retrying after {} seconds... ".format(
+                            new_delay
+                        ),
                         flush=True,
                     )
                 else:
@@ -299,9 +334,6 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
         content: File content as bytes
         timestamp_dir: Timestamp directory path (e.g., DST_DIR/timestamp)
         original_url: Original URL from Internet Archive for hash generation
-
-    Returns:
-        None
     """
     dirname, basename = path.split(fpath)
 
@@ -325,23 +357,35 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
         cleanup_empty_directory(dirname, timestamp_dir)
 
         # Use SHA-1 hash as fallback filename, save directly under timestamp directory
-        file_hash = hashlib.sha1(original_url.encode('utf-8')).hexdigest()
+        file_hash = hashlib.sha1(original_url.encode("utf-8")).hexdigest()
         # Extract extension from original URL path, not the processed basename
         url_parts = urlsplit(original_url)
-        file_ext = path.splitext(url_parts.path)[1] if '.' in url_parts.path else '.html'
+        file_ext = (
+            path.splitext(url_parts.path)[1] if "." in url_parts.path else ".html"
+        )
         hash_filename = file_hash + file_ext
         hash_fpath = path.join(timestamp_dir, hash_filename)
 
-        print(f"[Warning: could not save full path to filesystem. Using hashed filename {hash_filename}]", flush=True)
+        print(
+            f"[Warning: could not save full path to filesystem. Using hashed filename {hash_filename}]",
+            flush=True,
+        )
         try:
             with open(hash_fpath, "wb") as file:
                 file.write(content)
             print("[OK]", flush=True)
         except OSError:
-            print("[Error: failed to save even with hashed filename, skipped]", flush=True)
+            print(
+                "[Error: failed to save even with hashed filename, skipped]", flush=True
+            )
 
 
 def main():
+    """Main function to download website snapshots from Internet Archive.
+
+    Downloads all snapshots for the specified domain and date range,
+    saving them to the output directory with proper directory structure.
+    """
     snap_list = get_snapshot_list()
     download_files(snap_list)
     if dry_run:
