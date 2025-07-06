@@ -42,7 +42,8 @@ parser.add_argument(
     "--no-fail",
     default=False,
     action="store_true",
-    help="if retries are exceeded, and the file still couldn't have been downloaded, proceed to the next file instead of aborting the run",
+    help="if retries are exceeded, and the file still couldn't have been downloaded, "
+    "proceed to the next file instead of aborting the run",
 )
 parser.add_argument(
     "--skip-timestamps",
@@ -113,12 +114,12 @@ def cleanup_empty_directory(dirname: str, timestamp_dir: str):
 
 def build_snapshots_url(domain: str, from_date: str | None = None, to_date: str | None = None) -> str:
     """Build the full CDX API URL for retrieving the snapshots list for a domain and date range.
-    
+
     Args:
         domain: The domain to query snapshots for
         from_date: Optional start date (yyyyMMddhhmmss)
         to_date: Optional end date (yyyyMMddhhmmss)
-        
+
     Returns:
         Complete CDX API URL with domain and date filters
     """
@@ -145,7 +146,7 @@ def get_snapshot_list() -> SnapshotList:
         with open(snapshots_path, encoding="utf-8") as fh:
             snap_list = json.load(fh)
         print("Found cached snapshots.json")
-    except:
+    except:  # pylint: disable=bare-except  # we don't care about the exception type here
         # No cache, downloading
         url = build_snapshots_url(args.domain, args.from_date, args.to_date)
         retry_count = 0
@@ -155,7 +156,7 @@ def get_snapshot_list() -> SnapshotList:
                     time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
                 resp = requests.get(url, timeout=TIMEOUT)
                 break
-            except Exception:
+            except:  # pylint: disable=bare-except  # we don't care about the exception type here
                 if retry_count < RETRIES:
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
@@ -167,12 +168,13 @@ def get_snapshot_list() -> SnapshotList:
                     print("    failed to get snapshot list, aborting!")
                     sys.exit(1)
 
-        code = resp.status_code  # type: ignore  # resp is always defined here - script exits above if all retries fail
-        if resp.status_code != 200:  # type: ignore  # resp is always defined here - script exits above if all retries fail
+        # script exits above if all retries fail
+        code = resp.status_code  # type: ignore  # resp is always defined here
+        if resp.status_code != 200:  # type: ignore  # resp is always defined here
             print(f"[Error: {code}]")
             print("    failed to get snapshot list, aborting!")
             sys.exit(1)
-        snap_list = resp.json()  # type: ignore  # resp is always defined here - script exits above if all retries fail
+        snap_list = resp.json()  # type: ignore  # resp is always defined here
         os.makedirs(DST_DIR, exist_ok=True)
         with open(snapshots_path, "w", encoding="utf-8") as fh:
             json.dump(snap_list, fh)
@@ -273,7 +275,7 @@ def download_file(snap: tuple[str, str]):
     # See https://github.com/BGforgeNet/yawbdl/issues/5
     try:
         print(timestamp, original_url, " ", end="", flush=True)
-    except Exception:
+    except:  # pylint: disable=bare-except  # we don't care about the exception type here
         print("[Error: malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]")
 
     if timestamp in skip_timestamps:
@@ -296,7 +298,7 @@ def download_file(snap: tuple[str, str]):
                     time.sleep(DELAY * 2 * retry_count)  # increase delay with each try
                 resp = requests.get(url, timeout=TIMEOUT)
                 break
-            except Exception:
+            except:  # pylint: disable=bare-except  # we don't care about the exception type here
                 if retry_count < RETRIES:
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
@@ -311,15 +313,14 @@ def download_file(snap: tuple[str, str]):
                             flush=True,
                         )
                         return
-                    else:
-                        print("    failed to download, aborting", flush=True)
-                        sys.exit(1)
-
-        code = resp.status_code  # type: ignore  # resp is always defined here - script exits or returns above if all retries fail
+                    print("    failed to download, aborting", flush=True)
+                    sys.exit(1)
+        # script exits or returns above if all retries fail
+        code = resp.status_code  # type: ignore  # resp is always defined here
         if code != 200:
             print(f"[Error: {code}]", flush=True)
         else:
-            content = resp.content  # type: ignore  # resp is always defined here - script exits or returns above if all retries fail
+            content = resp.content  # type: ignore  # resp is always defined here
             if len(content) == 0:
                 print("[Skip: file size is 0]", flush=True)
             else:
