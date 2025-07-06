@@ -67,10 +67,8 @@ RETRIES = int(args.retries)
 NO_FAIL = args.no_fail
 try:
     skip_timestamps = args.skip_timestamps[0]
-except:
+except (TypeError, AttributeError):
     skip_timestamps = []
-
-vanilla_url = "http://web.archive.org/web/{}id_/{}"
 
 # Type alias for snapshot records
 Snapshot = tuple[str, str]
@@ -162,7 +160,7 @@ def get_snapshot_list() -> SnapshotList:
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
                     print(
-                        "    failed to get snapshot list, retrying after {} seconds... ".format(new_delay),
+                        f"    failed to get snapshot list, retrying after {new_delay} seconds... ",
                         flush=True,
                     )
                 else:
@@ -198,7 +196,7 @@ def download_files(snapshot_list: SnapshotList):
     i = 0
     for snap in snapshot_list:
         i += 1
-        print("({}/{}) ".format(i, total), end="")
+        print(f"({i}/{total}) ", end="")
         download_file(snap)
 
 
@@ -291,7 +289,7 @@ def download_file(snap: tuple[str, str]):
         print("")  # carriage return
     else:
         retry_count = 0
-        url = vanilla_url.format(timestamp, original_url)
+        url = f"http://web.archive.org/web/{timestamp}id_/{original_url}"
         while retry_count <= RETRIES:
             try:
                 if DELAY:
@@ -303,7 +301,7 @@ def download_file(snap: tuple[str, str]):
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
                     print(
-                        "    failed to download, retrying after {} seconds... ".format(new_delay),
+                        f"    failed to download, retrying after {new_delay} seconds... ",
                         flush=True,
                     )
                 else:
@@ -319,7 +317,7 @@ def download_file(snap: tuple[str, str]):
 
         code = resp.status_code  # type: ignore  # resp is always defined here - script exits or returns above if all retries fail
         if code != 200:
-            print("[Error: {}]".format(code), flush=True)
+            print(f"[Error: {code}]", flush=True)
         else:
             content = resp.content  # type: ignore  # resp is always defined here - script exits or returns above if all retries fail
             if len(content) == 0:
@@ -345,9 +343,7 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
 
     if path.isfile(dirname):
         print(
-            "[Warning] file {} already exists, can't create directory with the same name for {}".format(
-                dirname, basename
-            ),
+            f"[Warning] file {dirname} already exists, can't create directory with the same name for {basename}",
             flush=True,
         )
         return
