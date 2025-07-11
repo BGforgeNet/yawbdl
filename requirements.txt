@@ -4,9 +4,15 @@ certifi==2025.6.15
     # via requests
 charset-normalizer==3.4.2
     # via requests
+colorama==0.4.6 ; sys_platform == 'win32'
+    # via loguru
 idna==3.10
     # via requests
+loguru==0.7.3
+    # via yawbdl
 requests==2.32.4
     # via yawbdl
 urllib3==2.5.0
     # via requests
+win32-setctime==1.2.0 ; sys_platform == 'win32'
+    # via loguru
