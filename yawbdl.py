@@ -8,6 +8,7 @@ preserving the original directory structure when possible.
 """
 
 import argparse
+from dataclasses import dataclass
 import functools
 import hashlib
 import json
@@ -25,7 +26,7 @@ import requests
 
 # Configure loguru for console-only output
 logger.remove()
-logger.add(sys.stderr, format="{time:YYYY-MM-DD HH:mm:ss.SSS} | <level>{message}</level>", level="INFO")
+logger.add(sys.stdout, format="<level>{message}</level>", level="INFO")
 
 parser = argparse.ArgumentParser(
     description="Download a website from Internet Archive",
@@ -78,32 +79,75 @@ try:
 except (TypeError, AttributeError):
     skip_timestamps = []
 
+# Add file logger
+os.makedirs(DST_DIR, exist_ok=True)
+LOG_FILE = path.join(DST_DIR, "yawbdl.log")
+if path.exists(LOG_FILE):
+    os.remove(LOG_FILE)
+logger.add(LOG_FILE, format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
+
 # Type alias for snapshot records
 Snapshot = tuple[str, str]
 SnapshotList = list[Snapshot]
 
 
+@dataclass
+class DownloadContext:
+    """Context information for a download operation."""
+
+    current: int
+    total: int
+    timestamp: str
+    original_url: str
+
+
 def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
-    """Decorator that adds retry logic to download functions."""
+    """Decorator that adds retry logic with linear backoff to download functions.
+
+    When @retry_download decorates a function, it replaces that function with a wrapper
+    that catches exceptions and retries with linearly increasing delays (DELAY * 2 * retry_count).
+
+    On first failure: logs full URL line with retry message
+    On subsequent failures: logs indented continuation messages
+    After max retries: proceeds to next file (NO_FAIL=True) or exits program
+
+    The wrapper can have _url_context attribute set for progress logging:
+        setattr(fetch_url, "_url_context", (current, total, timestamp, original_url))
+    """
 
     @functools.wraps(func)
     def wrapper(*func_args: Any, **func_kwargs: Any) -> Any | None:
         retry_count = 0
         while retry_count <= RETRIES:
             try:
-                if DELAY:
+                if DELAY and retry_count > 0:
                     time.sleep(DELAY * 2 * retry_count)
                 return func(*func_args, **func_kwargs)
             except Exception:  # pylint: disable=broad-except
                 if retry_count < RETRIES:
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
-                    logger.warning(f"    failed to download, retrying after {new_delay} seconds... ")
+                    if hasattr(wrapper, "_url_context"):
+                        # Show URL with retry message for each attempt
+                        url_context = getattr(wrapper, "_url_context")
+                        current, total, timestamp, original_url = url_context
+                        context = DownloadContext(current, total, timestamp, original_url)
+                        log_status(
+                            context,
+                            f"[Failed to download, retrying after {new_delay} seconds...]",
+                            "warning",
+                        )
+                    else:
+                        # Fallback for functions without URL context
+                        logger.warning(f"Failed to download, retrying after {new_delay} seconds...")
                 else:
+                    url_context = getattr(wrapper, "_url_context")
+                    current, total, timestamp, original_url = url_context
+                    context = DownloadContext(current, total, timestamp, original_url)
                     if NO_FAIL:
-                        logger.warning("    failed to download, proceeding to next file")
+                        log_status(context, "[Failed to download, proceeding to next file]", "warning")
                         return None
-                    logger.error("    failed to download, aborting")
+                    log_status(context, f"[{RETRIES} retries failed, aborted]", "error")
                     sys.exit(1)
         return None  # This line should never be reached but satisfies pylint
 
@@ -189,13 +233,11 @@ def get_snapshot_list() -> SnapshotList:
             logger.error("    failed to get snapshot list, aborting!")
             sys.exit(1)
 
-        code = resp.status_code
         if resp.status_code != 200:
-            logger.error(f"[HTTP status code: {code}]")
+            logger.error(f"[HTTP status code: {resp.status_code}]")
             logger.error("    failed to get snapshot list, aborting!")
             sys.exit(1)
         snap_list = resp.json()
-        os.makedirs(DST_DIR, exist_ok=True)
         with open(snapshots_path, "w", encoding="utf-8") as fh:
             json.dump(snap_list, fh)
 
@@ -215,11 +257,8 @@ def download_files(snapshot_list: SnapshotList):
         snapshot_list: List of snapshot records, each containing (timestamp, original_url)
     """
     total = len(snapshot_list)
-    i = 0
-    for snap in snapshot_list:
-        i += 1
-        logger.info(f"({i}/{total}) ", end="")
-        download_file(snap)
+    for i, snap in enumerate(snapshot_list, 1):
+        download_file(snap, i, total)
 
 
 def url_to_path(url: str) -> str:
@@ -291,7 +330,16 @@ def fetch_url(url: str) -> requests.Response | None:
     return requests.get(url, timeout=TIMEOUT)
 
 
-def download_file(snap: tuple[str, str]):
+def log_status(context: DownloadContext, status: str, level: str = "info"):
+    """Log download status with progress counter, URL and result on same line."""
+    try:
+        message = f"({context.current}/{context.total}) {context.timestamp} {context.original_url} {status}"
+    except:  # pylint: disable=bare-except
+        message = f"({context.current}/{context.total}) {context.timestamp} [url malformed] {status}"
+    getattr(logger, level)(message)
+
+
+def download_file(snap: tuple[str, str], current: int, total: int):
     """Download and save a single URL from Internet Archive snapshot.
 
     Downloads content from Internet Archive for given timestamp and URL,
@@ -299,63 +347,71 @@ def download_file(snap: tuple[str, str]):
 
     Args:
         snap: Tuple containing (timestamp, original_url)
+        current: Current file number
+        total: Total number of files
     """
     timestamp: str = snap[0]
     original_url: str = snap[1]
-
-    # Some urls may be malformed and can't be printed with non-UTF-8 encodings.
-    # See https://github.com/BGforgeNet/yawbdl/issues/5
-    try:
-        logger.info(f"{timestamp} {original_url} ")
-    except:  # pylint: disable=bare-except  # we don't care about the exception type here
-        logger.error("[Malformed url, can't print. Set PYTHONUTF8=1 environment variable to see it.]")
+    context = DownloadContext(current, total, timestamp, original_url)
 
     if timestamp in skip_timestamps:
-        logger.info("[SKIP: by timestamp command line option]")
+        log_status(context, "[SKIP: by timestamp command line option]")
         return
 
     fpath = path.join(DST_DIR, timestamp, get_file_path(original_url))
     if path.isfile(fpath):
-        logger.info("[SKIP: already on disk]")
+        log_status(context, "[SKIP: already on disk]")
         return
 
     if DRY_RUN:
-        logger.debug("")  # carriage return
+        log_status(context, "[DRY RUN]")
+        return
+
+    url = f"http://web.archive.org/web/{timestamp}id_/{original_url}"
+
+    # Set context for this specific download
+    setattr(fetch_url, "_url_context", (current, total, timestamp, original_url))
+
+    resp = fetch_url(url)
+
+    if resp is None:  # Failed after all retries with NO_FAIL=True
+        # Don't log again since retry decorator already handled it
+        return
+
+    code = resp.status_code
+    if code != 200:
+        log_status(context, f"[HTTP code: {code}]", "error")
     else:
-        url = f"http://web.archive.org/web/{timestamp}id_/{original_url}"
-        resp = fetch_url(url)
-
-        if resp is None:  # Failed after all retries with NO_FAIL=True
-            return
-
-        code = resp.status_code
-        if code != 200:
-            logger.error(f"[HTTP code: {code}]")
+        content = resp.content
+        if len(content) == 0:
+            log_status(context, "[SKIP: file size is 0]")
         else:
-            content = resp.content
-            if len(content) == 0:
-                logger.info("[SKIP: file size is 0]")
-            else:
-                write_file(fpath, content, path.join(DST_DIR, timestamp), original_url)
+            write_file(fpath, content, path.join(DST_DIR, timestamp), original_url, context)
 
 
-def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str):
+def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str, context: DownloadContext) -> None:
     """Write content to file with hash filename fallback on filesystem errors.
 
     Attempts to save file with original path structure. If that fails due to filesystem
     limitations (path length, invalid characters, etc.), cleans up empty directories
     and saves with SHA-1 hash of original URL as filename under timestamp directory.
+    Handles all logging internally.
 
     Args:
         fpath: Full file path where content should be saved
         content: File content as bytes
         timestamp_dir: Timestamp directory path (e.g., DST_DIR/timestamp)
         original_url: Original URL from Internet Archive for hash generation
+        context: Download context for logging
     """
-    dirname, basename = path.split(fpath)
+    dirname, _ = path.split(fpath)
 
     if path.isfile(dirname):
-        logger.warning(f"File {dirname} already exists, can't create directory with the same name for {basename}")
+        log_status(
+            context,
+            f"[SKIP: could not save] File {dirname} already exists, can't create directory with the same name",
+            "error",
+        )
         return
 
     # Try to create directory and write file normally
@@ -363,26 +419,35 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
         os.makedirs(dirname, exist_ok=True)
         with open(fpath, "wb") as file:
             file.write(content)
-        logger.success("[OK]")
-    except OSError:
+        log_status(context, "[OK]", "success")
+        return
+    except OSError as e:
         # Cleanup any directories that might have been created
         cleanup_empty_directory(dirname, timestamp_dir)
 
         # Use SHA-1 hash as fallback filename, save directly under timestamp directory
         file_hash = hashlib.sha1(original_url.encode("utf-8")).hexdigest()
-        # Extract extension from original URL path, not the processed basename
         url_parts = urlsplit(original_url)
-        file_ext = path.splitext(url_parts.path)[1] if "." in url_parts.path else ".html"
-        hash_filename = file_hash + file_ext
-        hash_fpath = path.join(timestamp_dir, hash_filename)
+        file_ext = path.splitext(url_parts.path)[1] or ".html"
+        hash_fpath = path.join(timestamp_dir, file_hash + file_ext)
+        hashed_filename = file_hash + file_ext
 
-        logger.warning(f"[    Could not save full path to filesystem. Using hashed filename {hash_filename}]")
         try:
             with open(hash_fpath, "wb") as file:
                 file.write(content)
-            logger.success("[OK]")
-        except OSError:
-            logger.error("[SKIP: failed to save even with hashed filename]")
+            log_status(
+                context,
+                f"[OK: could not save to original path ({e}), used hashed filename {hashed_filename}]",
+                "success",
+            )
+            return
+        except OSError as e2:
+            log_status(
+                context,
+                f"[SKIP: could not save - hashed filename {hashed_filename} also failed ({e2})]",
+                "error",
+            )
+            return
 
 
 def main():
