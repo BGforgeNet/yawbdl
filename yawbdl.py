@@ -170,6 +170,24 @@ def get_snapshot_timestamp(snap: Snapshot) -> str:
     return snap[0]
 
 
+def get_hashed_file_path(original_url: str, timestamp_dir: str) -> tuple[str, str]:
+    """Generate hashed filename and full path for fallback saves.
+
+    Args:
+        original_url: The original URL to hash
+        timestamp_dir: Directory where the hashed file should be saved
+
+    Returns:
+        Tuple of (full_path, filename) for the hashed file
+    """
+    file_hash = hashlib.sha1(original_url.encode("utf-8")).hexdigest()
+    url_parts = urlsplit(original_url)
+    file_ext = path.splitext(url_parts.path)[1] or ".html"
+    hashed_filename = file_hash + file_ext
+    hash_fpath = path.join(timestamp_dir, hashed_filename)
+    return hash_fpath, hashed_filename
+
+
 def get_latest_snapshots(snapshot_list: SnapshotList) -> SnapshotList:
     """Filter snapshot list to keep only the latest version of each URL.
 
@@ -427,6 +445,12 @@ def download_file(snap: tuple[str, str], current: int, total: int):
         log_status(context, "[SKIP: already on disk]")
         return
 
+    # Also check if hashed filename exists (fallback save location)
+    hash_fpath, hashed_filename = get_hashed_file_path(original_url, path.join(DST_DIR, timestamp))
+    if path.isfile(hash_fpath):
+        log_status(context, f"[SKIP: hashed filename {hashed_filename} already on disk]")
+        return
+
     if DRY_RUN:
         log_status(context, "[DRY RUN]")
         return
@@ -490,11 +514,7 @@ def write_file(fpath: str, content: bytes, timestamp_dir: str, original_url: str
         cleanup_empty_directory(dirname, timestamp_dir)
 
         # Use SHA-1 hash as fallback filename, save directly under timestamp directory
-        file_hash = hashlib.sha1(original_url.encode("utf-8")).hexdigest()
-        url_parts = urlsplit(original_url)
-        file_ext = path.splitext(url_parts.path)[1] or ".html"
-        hash_fpath = path.join(timestamp_dir, file_hash + file_ext)
-        hashed_filename = file_hash + file_ext
+        hash_fpath, hashed_filename = get_hashed_file_path(original_url, timestamp_dir)
 
         try:
             with open(hash_fpath, "wb") as file:
