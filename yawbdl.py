@@ -60,6 +60,12 @@ parser.add_argument(
     nargs="+",
     help="skip snapshots with these timestamps (sometimes Internet Archive just fails to serve a specific snapshot)",
 )
+parser.add_argument(
+    "--latest-only",
+    action="store_true",
+    default=False,
+    help="download only the latest version of each URL",
+)
 
 args = parser.parse_args()
 
@@ -164,6 +170,28 @@ def get_snapshot_timestamp(snap: Snapshot) -> str:
     return snap[0]
 
 
+def get_latest_snapshots(snapshot_list: SnapshotList) -> SnapshotList:
+    """Filter snapshot list to keep only the latest version of each URL.
+
+    Args:
+        snapshot_list: List of (timestamp, url) tuples, assumed to be sorted by timestamp
+
+    Returns:
+        Filtered list with only the latest timestamp for each unique URL
+    """
+    url_to_latest: dict[str, Snapshot] = {}
+
+    for snap in snapshot_list:
+        _, url = snap
+        # Since list is sorted by timestamp, later entries will overwrite earlier ones
+        url_to_latest[url] = snap
+
+    # Return in original timestamp order
+    result = list(url_to_latest.values())
+    result.sort(key=get_snapshot_timestamp)
+    return result
+
+
 def cleanup_empty_directory(dirname: str, timestamp_dir: str):
     """Clean up empty directory tree created for a failed file save.
 
@@ -262,26 +290,26 @@ def get_snapshot_list() -> SnapshotList:
     # Apply timestamp filtering dynamically
     if args.from_date or args.to_date:
         original_count = len(snap_list)
-        filtered_list: SnapshotList = []
 
-        for snap in snap_list:
-            timestamp = snap[0]
-
-            # Check from_date filter
-            if args.from_date and timestamp < args.from_date:
-                continue
-
-            # Check to_date filter
-            if args.to_date and timestamp > args.to_date:
-                continue
-
-            filtered_list.append(snap)
-
-        snap_list = filtered_list
+        snap_list = list(
+            filter(
+                lambda snap: (not args.from_date or snap[0] >= args.from_date.ljust(14, "0"))
+                and (not args.to_date or snap[0] <= args.to_date.ljust(14, "0")),
+                snap_list,
+            )
+        )
         filtered_count = len(snap_list)
         logger.info(f"Applied timestamp filters: {original_count} -> {filtered_count} snapshots")
 
     snap_list.sort(key=get_snapshot_timestamp)  # sort by timestamp
+
+    # Apply latest-only filtering if requested
+    if args.latest_only:
+        original_count = len(snap_list)
+        snap_list = get_latest_snapshots(snap_list)
+        filtered_count = len(snap_list)
+        logger.info(f"Filtered to latest versions only: {original_count} -> {filtered_count} snapshots")
+
     logger.info("Got snapshot list!")
     return snap_list
 
