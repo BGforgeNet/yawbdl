@@ -141,22 +141,27 @@ def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
                         # Fallback for functions without URL context
                         logger.warning(f"Failed to download, retrying after {new_delay} seconds...")
                 else:
-                    url_context = getattr(wrapper, "_url_context")
-                    current, total, timestamp, original_url = url_context
-                    context = DownloadContext(current, total, timestamp, original_url)
-                    if NO_FAIL:
-                        log_status(context, "[Failed to download, proceeding to next file]", "warning")
-                        return None
-                    log_status(context, f"[{RETRIES} retries failed, aborted]", "error")
-                    sys.exit(1)
+                    if hasattr(wrapper, "_url_context"):
+                        url_context = getattr(wrapper, "_url_context")
+                        current, total, timestamp, original_url = url_context
+                        context = DownloadContext(current, total, timestamp, original_url)
+                        if NO_FAIL:
+                            log_status(context, "[Failed to download, proceeding to next file]", "warning")
+                            return None
+                        log_status(context, f"[{RETRIES} retries failed, aborted]", "error")
+                        sys.exit(1)
+                    else:
+                        # Fallback for functions without URL context. That's only snapshots.
+                        logger.error(f"{RETRIES} retries failed, aborting")
+                        sys.exit(1)
         return None  # This line should never be reached but satisfies pylint
 
     return wrapper
 
 
-def get_snapshot_timestamp(row: list[str]) -> str:
-    """Extract timestamp from snapshot row for sorting."""
-    return row[0]
+def get_snapshot_timestamp(snap: Snapshot) -> str:
+    """Extract timestamp from snapshot tuple for sorting."""
+    return snap[0]
 
 
 def cleanup_empty_directory(dirname: str, timestamp_dir: str):
@@ -190,28 +195,25 @@ def cleanup_empty_directory(dirname: str, timestamp_dir: str):
         pass  # Ignore cleanup errors
 
 
-def build_snapshots_url(domain: str, from_date: str | None = None, to_date: str | None = None) -> str:
-    """Build the full CDX API URL for retrieving the snapshots list for a domain and date range.
+def build_snapshots_url(domain: str) -> str:
+    """Build the full CDX API URL for retrieving all snapshots for a domain.
 
     Args:
         domain: The domain to query snapshots for
-        from_date: Optional start date (yyyyMMddhhmmss)
-        to_date: Optional end date (yyyyMMddhhmmss)
 
     Returns:
-        Complete CDX API URL with domain and date filters
+        Complete CDX API URL for all snapshots of the domain
     """
     cdx_url = "http://web.archive.org/cdx/search/cdx?"
     params = f"output=json&url={domain}&matchType=host&filter=statuscode:200&fl=timestamp,original"
-    if from_date is not None:
-        params += f"&from={from_date}"
-    if to_date is not None:
-        params += f"&to={to_date}"
     return cdx_url + params
 
 
 def get_snapshot_list() -> SnapshotList:
     """Load cached snapshot list from file or download from Internet Archive.
+
+    Always downloads the complete snapshot list for the domain, then applies
+    timestamp filtering dynamically based on command line arguments.
 
     Returns:
         List of snapshot records, each containing (timestamp, original_url)
@@ -220,13 +222,17 @@ def get_snapshot_list() -> SnapshotList:
 
     # Try cached snapshots
     snapshots_path = path.join(DST_DIR, "snapshots.json")
+    snap_list: SnapshotList = []
+
     try:
         with open(snapshots_path, encoding="utf-8") as fh:
-            snap_list = json.load(fh)
+            raw_list = json.load(fh)
+            # Convert to properly typed list
+            snap_list = [(str(item[0]), str(item[1])) for item in raw_list]
         logger.info("Found cached snapshots.json")
     except:  # pylint: disable=bare-except  # we don't care about the exception type here
-        # No cache, downloading
-        url = build_snapshots_url(args.domain, args.from_date, args.to_date)
+        # No cache, downloading full snapshot list
+        url = build_snapshots_url(args.domain)
         resp = fetch_snapshots(url)
 
         if resp is None:  # Failed after all retries
@@ -237,14 +243,44 @@ def get_snapshot_list() -> SnapshotList:
             logger.error(f"[HTTP status code: {resp.status_code}]")
             logger.error("    failed to get snapshot list, aborting!")
             sys.exit(1)
-        snap_list = resp.json()
+
+        raw_list = resp.json()
         with open(snapshots_path, "w", encoding="utf-8") as fh:
-            json.dump(snap_list, fh)
+            json.dump(raw_list, fh)
+
+        # Convert to properly typed list
+        snap_list = [(str(item[0]), str(item[1])) for item in raw_list]
 
     if len(snap_list) == 0:
         logger.warning("Sorry, no snapshots found!")
         sys.exit(1)
-    del snap_list[0]  # delete header
+
+    # Remove header row
+    if snap_list:
+        snap_list = snap_list[1:]
+
+    # Apply timestamp filtering dynamically
+    if args.from_date or args.to_date:
+        original_count = len(snap_list)
+        filtered_list: SnapshotList = []
+
+        for snap in snap_list:
+            timestamp = snap[0]
+
+            # Check from_date filter
+            if args.from_date and timestamp < args.from_date:
+                continue
+
+            # Check to_date filter
+            if args.to_date and timestamp > args.to_date:
+                continue
+
+            filtered_list.append(snap)
+
+        snap_list = filtered_list
+        filtered_count = len(snap_list)
+        logger.info(f"Applied timestamp filters: {original_count} -> {filtered_count} snapshots")
+
     snap_list.sort(key=get_snapshot_timestamp)  # sort by timestamp
     logger.info("Got snapshot list!")
     return snap_list
