@@ -7,11 +7,11 @@ YAWBDL is a tool to download archived pages from Internet Archive, which I wrote
 ```bash
 pipx install yawbdl
 
-yawbdl
-usage: yawbdl [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE] [--to TO_DATE]
-              [--timeout TIMEOUT] [-n] [--delay DELAY] [--retries RETRIES]
-              [--no-fail]
-              [--skip-timestamps SKIP_TIMESTAMPS [SKIP_TIMESTAMPS ...]]
+usage: yawbdl.py [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE] [--to TO_DATE]
+                 [--timeout TIMEOUT] [-n] [--delay DELAY] [--retries RETRIES]
+                 [--no-fail]
+                 [--skip-timestamps SKIP_TIMESTAMPS [SKIP_TIMESTAMPS ...]]
+                 [--latest-only]
 
 Download a website from Internet Archive
 
@@ -33,4 +33,6 @@ options:
                         skip snapshots with these timestamps (sometimes Internet
                         Archive just fails to serve a specific snapshot)
                         (default: None)
+  --latest-only         download only the latest version of each URL (default:
+                        False)
 ```
