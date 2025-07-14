@@ -1,5 +1,9 @@
 ## Changelog
 
+### 1.1.1
+
+Added missing console script for pipx usage, lost in 1.1.0.
+
 ### 1.1.0
 
 - Fixed crash on extra long urls.

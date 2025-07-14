@@ -13,6 +13,9 @@ dependencies = [
     "requests>=2.32.4",
 ]
 
+[project.scripts]
+yawbdl = "yawbdl:main"
+
 [project.urls]
 Homepage = "https://github.com/BGforgeNet/yawbdl"
 Repository = "https://github.com/BGforgeNet/yawbdl"
