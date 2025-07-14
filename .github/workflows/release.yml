@@ -6,6 +6,10 @@ on:
   push:
   pull_request:
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
