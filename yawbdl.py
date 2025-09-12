@@ -26,7 +26,7 @@ import requests
 
 # Configure loguru for console-only output
 logger.remove()
-logger.add(sys.stdout, format="<level>{message}</level>", level="INFO")
+# Initial console logger will be reconfigured after parsing args
 
 parser = argparse.ArgumentParser(
     description="Download a website from Internet Archive",
@@ -66,6 +66,12 @@ parser.add_argument(
     default=False,
     help="download only the latest version of each URL",
 )
+parser.add_argument(
+    "--debug",
+    action="store_true",
+    default=False,
+    help="enable debug logging to show detailed error information",
+)
 
 args = parser.parse_args()
 
@@ -80,17 +86,22 @@ DRY_RUN = args.n
 DELAY = int(args.delay)
 RETRIES = int(args.retries)
 NO_FAIL = args.no_fail
+DEBUG = args.debug
 try:
     skip_timestamps = args.skip_timestamps[0]
 except (TypeError, AttributeError):
     skip_timestamps = []
+
+# Configure loguru based on debug flag
+log_level = "DEBUG" if DEBUG else "INFO"
+logger.add(sys.stdout, format="<level>{message}</level>", level=log_level)
 
 # Add file logger
 os.makedirs(DST_DIR, exist_ok=True)
 LOG_FILE = path.join(DST_DIR, "yawbdl.log")
 if path.exists(LOG_FILE):
     os.remove(LOG_FILE)
-logger.add(LOG_FILE, format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}")
+logger.add(LOG_FILE, format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}", level=log_level)
 
 # Type alias for snapshot records
 Snapshot = tuple[str, str]
@@ -129,7 +140,14 @@ def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
                 if DELAY and retry_count > 0:
                     time.sleep(DELAY * 2 * retry_count)
                 return func(*func_args, **func_kwargs)
-            except Exception:  # pylint: disable=broad-except
+            except Exception as e:  # pylint: disable=broad-except
+                # Log detailed error in debug mode
+                if DEBUG:
+                    import traceback
+                    logger.debug(f"Exception details: {str(e)}")
+                    logger.debug(f"Exception type: {type(e).__name__}")
+                    logger.debug(f"Traceback:\n{traceback.format_exc()}")
+
                 if retry_count < RETRIES:
                     retry_count += 1
                     new_delay = DELAY * 2 * retry_count
@@ -403,13 +421,38 @@ def get_file_path(original_url: str) -> str:
 @retry_download
 def fetch_snapshots(url: str) -> requests.Response | None:
     """Fetch snapshots list from CDX API with retry logic."""
-    return requests.get(url, timeout=TIMEOUT)
+    if DEBUG:
+        logger.debug(f"Fetching snapshots from: {url}")
+    response = requests.get(url, timeout=TIMEOUT)
+    if DEBUG:
+        logger.debug(f"Response status code: {response.status_code}")
+        logger.debug(f"Response headers: {dict(response.headers)}")
+    return response
 
 
 @retry_download
 def fetch_url(url: str) -> requests.Response | None:
     """Fetch content from URL with retry logic."""
-    return requests.get(url, timeout=TIMEOUT)
+    if DEBUG:
+        logger.debug(f"Fetching URL: {url}")
+
+    # Try normal request first
+    try:
+        response = requests.get(url, timeout=TIMEOUT)
+        if DEBUG:
+            logger.debug(f"Response status code: {response.status_code}")
+            logger.debug(f"Response content length: {len(response.content)} bytes")
+        return response
+    except requests.exceptions.ContentDecodingError as e:
+        if DEBUG:
+            logger.debug(f"ContentDecodingError: {e}, retrying with raw content...")
+
+        # Fallback: request with stream=True and read raw
+        response = requests.get(url, timeout=TIMEOUT, stream=True)
+        response._content = response.raw.read()
+        if DEBUG:
+            logger.debug(f"Successfully read {len(response._content)} bytes as raw content")
+        return response
 
 
 def log_status(context: DownloadContext, status: str, level: str = "info"):
@@ -457,6 +500,9 @@ def download_file(snap: tuple[str, str], current: int, total: int):
 
     url = f"http://web.archive.org/web/{timestamp}id_/{original_url}"
 
+    if DEBUG:
+        logger.debug(f"Attempting to download: {url}")
+
     # Set context for this specific download
     setattr(fetch_url, "_url_context", (current, total, timestamp, original_url))
 
@@ -464,6 +510,8 @@ def download_file(snap: tuple[str, str], current: int, total: int):
 
     if resp is None:  # Failed after all retries with NO_FAIL=True
         # Don't log again since retry decorator already handled it
+        if DEBUG:
+            logger.debug(f"fetch_url returned None for {url}")
         return
 
     code = resp.status_code
@@ -474,6 +522,8 @@ def download_file(snap: tuple[str, str], current: int, total: int):
         if len(content) == 0:
             log_status(context, "[SKIP: file size is 0]")
         else:
+            if DEBUG:
+                logger.debug(f"Successfully fetched {len(content)} bytes, writing to file")
             write_file(fpath, content, path.join(DST_DIR, timestamp), original_url, context)
 
 
