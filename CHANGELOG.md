@@ -1,5 +1,10 @@
 ## Changelog
 
+### 1.1.2
+
+- Added `--debug` argument to show detailed information.
+- Added a [workaround](https://github.com/BGforgeNet/yawbdl/issues/9) for wrong encoding header sent by IA servers in some cases.
+
 ### 1.1.1
 
 Added missing console script for pipx usage, lost in 1.1.0.

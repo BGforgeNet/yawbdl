@@ -6,12 +6,13 @@ YAWBDL is a tool to download archived pages from Internet Archive, which I wrote
 
 ```bash
 pipx install yawbdl
+yawbdl
 
-usage: yawbdl.py [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE] [--to TO_DATE]
+usage: yawbdl [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE] [--to TO_DATE]
                  [--timeout TIMEOUT] [-n] [--delay DELAY] [--retries RETRIES]
                  [--no-fail]
                  [--skip-timestamps SKIP_TIMESTAMPS [SKIP_TIMESTAMPS ...]]
-                 [--latest-only]
+                 [--latest-only] [--debug]
 
 Download a website from Internet Archive
 
@@ -35,4 +36,17 @@ options:
                         (default: None)
   --latest-only         download only the latest version of each URL (default:
                         False)
+  --debug               enable debug logging to show detailed error information
+                        (default: False)
+```
+
+## Examples
+
+```bash
+yawbdl -d "tools.oszone.net" -o "tools.oszone.net" --no-fail --retries 3 --delay 2
+Getting snapshot list...
+Got snapshot list!
+(1/1017) 20051203093720 http://tools.oszone.net:80/Vadikan/faq.html [OK]
+(2/1017) 20060101071820 http://tools.oszone.net:80/Vadikan/DotNet.exe [OK]
+...
 ```
