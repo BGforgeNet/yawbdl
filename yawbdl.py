@@ -18,6 +18,7 @@ import re
 import shutil
 import sys
 import time
+import traceback
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
@@ -93,15 +94,15 @@ except (TypeError, AttributeError):
     skip_timestamps = []
 
 # Configure loguru based on debug flag
-log_level = "DEBUG" if DEBUG else "INFO"
-logger.add(sys.stdout, format="<level>{message}</level>", level=log_level)
+LOG_LEVEL = "DEBUG" if DEBUG else "INFO"
+logger.add(sys.stdout, format="<level>{message}</level>", level=LOG_LEVEL)
 
 # Add file logger
 os.makedirs(DST_DIR, exist_ok=True)
 LOG_FILE = path.join(DST_DIR, "yawbdl.log")
 if path.exists(LOG_FILE):
     os.remove(LOG_FILE)
-logger.add(LOG_FILE, format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}", level=log_level)
+logger.add(LOG_FILE, format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {message}", level=LOG_LEVEL)
 
 # Type alias for snapshot records
 Snapshot = tuple[str, str]
@@ -143,7 +144,6 @@ def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
             except Exception as e:  # pylint: disable=broad-except
                 # Log detailed error in debug mode
                 if DEBUG:
-                    import traceback
                     logger.debug(f"Exception details: {str(e)}")
                     logger.debug(f"Exception type: {type(e).__name__}")
                     logger.debug(f"Traceback:\n{traceback.format_exc()}")
@@ -449,9 +449,11 @@ def fetch_url(url: str) -> requests.Response | None:
 
         # Fallback: request with stream=True and read raw
         response = requests.get(url, timeout=TIMEOUT, stream=True)
-        response._content = response.raw.read()
+        raw_content = response.raw.read()
+        # Use setattr to avoid pylint protected-access warning
+        setattr(response, '_content', raw_content)
         if DEBUG:
-            logger.debug(f"Successfully read {len(response._content)} bytes as raw content")
+            logger.debug(f"Successfully read {len(raw_content)} bytes as raw content")
         return response
 
 
