@@ -10,7 +10,7 @@ idna==3.10
     # via requests
 loguru==0.7.3
     # via yawbdl
-requests==2.32.4
+requests==2.33.0
     # via yawbdl
 urllib3==2.6.3
     # via requests
