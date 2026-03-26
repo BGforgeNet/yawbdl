@@ -329,8 +329,10 @@ def get_snapshot_list() -> SnapshotList:
 
         snap_list = list(
             filter(
-                lambda snap: (not args.from_date or snap[0] >= args.from_date.ljust(14, "0"))
-                and (not args.to_date or snap[0] <= args.to_date.ljust(14, "0")),
+                lambda snap: (
+                    (not args.from_date or snap[0] >= args.from_date.ljust(14, "0"))
+                    and (not args.to_date or snap[0] <= args.to_date.ljust(14, "0"))
+                ),
                 snap_list,
             )
         )
