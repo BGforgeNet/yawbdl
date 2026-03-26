@@ -2,10 +2,17 @@
 
 YAWBDL is a tool to download archived pages from Internet Archive, which I wrote because none of other tools worked good enough (or at all) in my use cases.
 
-### Usage
+### Installation
 
 ```bash
 pipx install yawbdl
+# or
+uv tool install yawbdl
+```
+
+### Usage
+
+```bash
 yawbdl
 
 usage: yawbdl [-h] [-d DOMAIN] [-o DST_DIR] [--from FROM_DATE] [--to TO_DATE]
@@ -49,4 +56,14 @@ Got snapshot list!
 (1/1017) 20051203093720 http://tools.oszone.net:80/Vadikan/faq.html [OK]
 (2/1017) 20060101071820 http://tools.oszone.net:80/Vadikan/DotNet.exe [OK]
 ...
+```
+
+## Development
+
+```bash
+uv sync                    # Install dependencies
+uv run ruff check          # Lint
+uv run ruff format --check # Check formatting
+uv run ruff check --fix    # Auto-fix lint issues
+uv run ruff format         # Auto-format
 ```

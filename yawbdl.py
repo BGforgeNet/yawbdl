@@ -8,6 +8,7 @@ preserving the original directory structure when possible.
 """
 
 import argparse
+from collections.abc import Callable
 from dataclasses import dataclass
 import functools
 import hashlib
@@ -19,7 +20,7 @@ import shutil
 import sys
 import time
 import traceback
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlsplit
 
 from loguru import logger
@@ -141,10 +142,10 @@ def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
                 if DELAY and retry_count > 0:
                     time.sleep(DELAY * 2 * retry_count)
                 return func(*func_args, **func_kwargs)
-            except Exception as e:  # pylint: disable=broad-except
+            except Exception as e:
                 # Log detailed error in debug mode
                 if DEBUG:
-                    logger.debug(f"Exception details: {str(e)}")
+                    logger.debug(f"Exception details: {e!s}")
                     logger.debug(f"Exception type: {type(e).__name__}")
                     logger.debug(f"Traceback:\n{traceback.format_exc()}")
 
@@ -153,7 +154,7 @@ def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
                     new_delay = DELAY * 2 * retry_count
                     if hasattr(wrapper, "_url_context"):
                         # Show URL with retry message for each attempt
-                        url_context = getattr(wrapper, "_url_context")
+                        url_context = wrapper._url_context
                         current, total, timestamp, original_url = url_context
                         context = DownloadContext(current, total, timestamp, original_url)
                         log_status(
@@ -164,21 +165,20 @@ def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
                     else:
                         # Fallback for functions without URL context
                         logger.warning(f"Failed to download, retrying after {new_delay} seconds...")
+                elif hasattr(wrapper, "_url_context"):
+                    url_context = wrapper._url_context
+                    current, total, timestamp, original_url = url_context
+                    context = DownloadContext(current, total, timestamp, original_url)
+                    if NO_FAIL:
+                        log_status(context, "[Failed to download, proceeding to next file]", "warning")
+                        return None
+                    log_status(context, f"[{RETRIES} retries failed, aborted]", "error")
+                    sys.exit(1)
                 else:
-                    if hasattr(wrapper, "_url_context"):
-                        url_context = getattr(wrapper, "_url_context")
-                        current, total, timestamp, original_url = url_context
-                        context = DownloadContext(current, total, timestamp, original_url)
-                        if NO_FAIL:
-                            log_status(context, "[Failed to download, proceeding to next file]", "warning")
-                            return None
-                        log_status(context, f"[{RETRIES} retries failed, aborted]", "error")
-                        sys.exit(1)
-                    else:
-                        # Fallback for functions without URL context. That's only snapshots.
-                        logger.error(f"{RETRIES} retries failed, aborting")
-                        sys.exit(1)
-        return None  # This line should never be reached but satisfies pylint
+                    # Fallback for functions without URL context. That's only snapshots.
+                    logger.error(f"{RETRIES} retries failed, aborting")
+                    sys.exit(1)
+        return None  # unreachable — satisfies type checker
 
     return wrapper
 
@@ -294,7 +294,7 @@ def get_snapshot_list() -> SnapshotList:
             # Convert to properly typed list
             snap_list = [(str(item[0]), str(item[1])) for item in raw_list]
         logger.info("Found cached snapshots.json")
-    except:  # pylint: disable=bare-except  # we don't care about the exception type here
+    except Exception:  # cache miss or corrupt file — download fresh
         # No cache, downloading full snapshot list
         url = build_snapshots_url(args.domain)
         resp = fetch_snapshots(url)
@@ -450,8 +450,7 @@ def fetch_url(url: str) -> requests.Response | None:
         # Fallback: request with stream=True and read raw
         response = requests.get(url, timeout=TIMEOUT, stream=True)
         raw_content = response.raw.read()
-        # Use setattr to avoid pylint protected-access warning
-        setattr(response, '_content', raw_content)
+        response._content = raw_content  # requests stores decoded body in _content
         if DEBUG:
             logger.debug(f"Successfully read {len(raw_content)} bytes as raw content")
         return response
@@ -461,7 +460,7 @@ def log_status(context: DownloadContext, status: str, level: str = "info"):
     """Log download status with progress counter, URL and result on same line."""
     try:
         message = f"({context.current}/{context.total}) {context.timestamp} {context.original_url} {status}"
-    except:  # pylint: disable=bare-except
+    except Exception:
         message = f"({context.current}/{context.total}) {context.timestamp} [url malformed] {status}"
     getattr(logger, level)(message)
 
@@ -506,7 +505,7 @@ def download_file(snap: tuple[str, str], current: int, total: int):
         logger.debug(f"Attempting to download: {url}")
 
     # Set context for this specific download
-    setattr(fetch_url, "_url_context", (current, total, timestamp, original_url))
+    fetch_url._url_context = current, total, timestamp, original_url
 
     resp = fetch_url(url)
 

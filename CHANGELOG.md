@@ -1,5 +1,9 @@
 ## Changelog
 
+### 1.1.3
+
+- KeyboardInterrupt (Ctrl+C) is no longer silently caught during snapshot cache loading and status logging.
+
 ### 1.1.2
 
 - Added `--debug` argument to show detailed information.
