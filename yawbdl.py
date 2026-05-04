@@ -143,6 +143,7 @@ def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
                     time.sleep(DELAY * 2 * retry_count)
                 return func(*func_args, **func_kwargs)
             except Exception as e:
+                err = f"{type(e).__name__}: {e}"
                 # Log detailed error in debug mode
                 if DEBUG:
                     logger.debug(f"Exception details: {e!s}")
@@ -159,24 +160,24 @@ def retry_download(func: Callable[..., Any]) -> Callable[..., Any | None]:
                         context = DownloadContext(current, total, timestamp, original_url)
                         log_status(
                             context,
-                            f"[Failed to download, retrying after {new_delay} seconds...]",
+                            f"[Failed to download ({err}), retrying after {new_delay} seconds...]",
                             "warning",
                         )
                     else:
                         # Fallback for functions without URL context
-                        logger.warning(f"Failed to download, retrying after {new_delay} seconds...")
+                        logger.warning(f"Failed to download ({err}), retrying after {new_delay} seconds...")
                 elif hasattr(wrapper, "_url_context"):
                     url_context = wrapper._url_context
                     current, total, timestamp, original_url = url_context
                     context = DownloadContext(current, total, timestamp, original_url)
                     if NO_FAIL:
-                        log_status(context, "[Failed to download, proceeding to next file]", "warning")
+                        log_status(context, f"[Failed to download ({err}), proceeding to next file]", "warning")
                         return None
-                    log_status(context, f"[{RETRIES} retries failed, aborted]", "error")
+                    log_status(context, f"[{RETRIES} retries failed ({err}), aborted]", "error")
                     sys.exit(1)
                 else:
                     # Fallback for functions without URL context. That's only snapshots.
-                    logger.error(f"{RETRIES} retries failed, aborting")
+                    logger.error(f"{RETRIES} retries failed ({err}), aborting")
                     sys.exit(1)
         return None  # unreachable — satisfies type checker
 
@@ -297,18 +298,12 @@ def get_snapshot_list() -> SnapshotList:
     except Exception:  # cache miss or corrupt file — download fresh
         # No cache, downloading full snapshot list
         url = build_snapshots_url(args.domain)
-        resp = fetch_snapshots(url)
+        raw_list = fetch_snapshots(url)
 
-        if resp is None:  # Failed after all retries
+        if raw_list is None:  # Failed after all retries
             logger.error("    failed to get snapshot list, aborting!")
             sys.exit(1)
 
-        if resp.status_code != 200:
-            logger.error(f"[HTTP status code: {resp.status_code}]")
-            logger.error("    failed to get snapshot list, aborting!")
-            sys.exit(1)
-
-        raw_list = resp.json()
         with open(snapshots_path, "w", encoding="utf-8") as fh:
             json.dump(raw_list, fh)
 
@@ -421,15 +416,20 @@ def get_file_path(original_url: str) -> str:
 
 
 @retry_download
-def fetch_snapshots(url: str) -> requests.Response | None:
-    """Fetch snapshots list from CDX API with retry logic."""
+def fetch_snapshots(url: str) -> list[list[str]] | None:
+    """Fetch and parse snapshot list from CDX API with retry logic.
+
+    Parses JSON inside the retry boundary so a truncated or malformed response
+    (common for large domains) triggers a retry instead of aborting.
+    """
     if DEBUG:
         logger.debug(f"Fetching snapshots from: {url}")
     response = requests.get(url, timeout=TIMEOUT)
     if DEBUG:
         logger.debug(f"Response status code: {response.status_code}")
         logger.debug(f"Response headers: {dict(response.headers)}")
-    return response
+    response.raise_for_status()
+    return response.json()
 
 
 @retry_download
