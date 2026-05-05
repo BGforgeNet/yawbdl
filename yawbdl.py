@@ -261,16 +261,21 @@ def cleanup_empty_directory(dirname: str, timestamp_dir: str):
 
 
 def build_snapshots_url(domain: str) -> str:
-    """Build the full CDX API URL for retrieving all snapshots for a domain.
+    """Build the base CDX API URL (selectivity only) for snapshots of a domain.
+
+    Returns only `url`, `matchType`, and `filter`. The `output=json` and
+    `fl=timestamp,original` params each break the `showNumPages=true` count
+    endpoint (returning `[[null,null]]` and `- -` respectively), so each
+    fetcher appends its own output/projection params.
 
     Args:
         domain: The domain to query snapshots for
 
     Returns:
-        Complete CDX API URL for all snapshots of the domain
+        Base CDX API URL for all snapshots of the domain
     """
     cdx_url = "http://web.archive.org/cdx/search/cdx?"
-    params = f"output=json&url={domain}&matchType=host&filter=statuscode:200&fl=timestamp,original"
+    params = f"url={domain}&matchType=host&filter=statuscode:200"
     return cdx_url + params
 
 
@@ -296,13 +301,29 @@ def get_snapshot_list() -> SnapshotList:
             snap_list = [(str(item[0]), str(item[1])) for item in raw_list]
         logger.info("Found cached snapshots.json")
     except Exception:  # cache miss or corrupt file — download fresh
-        # No cache, downloading full snapshot list
+        # No cache, downloading full snapshot list page by page
         url = build_snapshots_url(args.domain)
-        raw_list = fetch_snapshots(url)
+        num_pages = fetch_snapshot_page_count(url)
 
-        if raw_list is None:  # Failed after all retries
-            logger.error("    failed to get snapshot list, aborting!")
+        if num_pages is None:  # Failed after all retries
+            logger.error("    failed to get snapshot page count, aborting!")
             sys.exit(1)
+
+        if num_pages == 0:
+            logger.warning("Sorry, no snapshots found!")
+            sys.exit(1)
+
+        raw_list: list[list[str]] = []
+        for page in range(num_pages):
+            logger.info(f"Fetching snapshot page {page + 1}/{num_pages}...")
+            page_data = fetch_snapshots_page(url, page)
+            if page_data is None:  # Failed after all retries
+                logger.error(f"    failed to fetch snapshot page {page + 1}, aborting!")
+                sys.exit(1)
+            # CDX repeats the header row on every page — strip it.
+            if page_data and page_data[0] == ["timestamp", "original"]:
+                page_data = page_data[1:]
+            raw_list.extend(page_data)
 
         with open(snapshots_path, "w", encoding="utf-8") as fh:
             json.dump(raw_list, fh)
@@ -313,10 +334,6 @@ def get_snapshot_list() -> SnapshotList:
     if len(snap_list) == 0:
         logger.warning("Sorry, no snapshots found!")
         sys.exit(1)
-
-    # Remove header row
-    if snap_list:
-        snap_list = snap_list[1:]
 
     # Apply timestamp filtering dynamically
     if args.from_date or args.to_date:
@@ -416,15 +433,33 @@ def get_file_path(original_url: str) -> str:
 
 
 @retry_download
-def fetch_snapshots(url: str) -> list[list[str]] | None:
-    """Fetch and parse snapshot list from CDX API with retry logic.
+def fetch_snapshot_page_count(url: str) -> int | None:
+    """Fetch the number of CDX pages for the snapshot query.
+
+    The CDX API splits large result sets into pages; this returns the total
+    page count so the caller can iterate from 0 to N-1.
+    """
+    count_url = f"{url}&showNumPages=true"
+    if DEBUG:
+        logger.debug(f"Fetching page count from: {count_url}")
+    response = requests.get(count_url, timeout=TIMEOUT)
+    if DEBUG:
+        logger.debug(f"Response status code: {response.status_code}")
+    response.raise_for_status()
+    return int(response.text.strip())
+
+
+@retry_download
+def fetch_snapshots_page(url: str, page: int) -> list[list[str]] | None:
+    """Fetch and parse one page of the CDX snapshot list with retry logic.
 
     Parses JSON inside the retry boundary so a truncated or malformed response
-    (common for large domains) triggers a retry instead of aborting.
+    triggers a retry instead of aborting.
     """
+    page_url = f"{url}&output=json&fl=timestamp,original&page={page}"
     if DEBUG:
-        logger.debug(f"Fetching snapshots from: {url}")
-    response = requests.get(url, timeout=TIMEOUT)
+        logger.debug(f"Fetching snapshots page {page} from: {page_url}")
+    response = requests.get(page_url, timeout=TIMEOUT)
     if DEBUG:
         logger.debug(f"Response status code: {response.status_code}")
         logger.debug(f"Response headers: {dict(response.headers)}")
