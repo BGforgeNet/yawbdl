@@ -1,5 +1,11 @@
 ## Changelog
 
+### 1.1.4
+
+- Snapshot list is now fetched page by page from the CDX API, avoiding `JSONDecodeError` on large domains where the single-shot response was truncated mid-stream ([#14](https://github.com/BGforgeNet/yawbdl/issues/14)).
+- Truncated/malformed snapshot list responses now trigger the retry mechanism instead of aborting.
+- Retry/abort log messages include the exception type and message (e.g. `HTTPError: 503 ...`, `JSONDecodeError: ...`) without needing `--debug`.
+
 ### 1.1.3
 
 - KeyboardInterrupt (Ctrl+C) is no longer silently caught during snapshot cache loading and status logging.
